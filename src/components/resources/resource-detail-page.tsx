@@ -6,6 +6,7 @@ import { ErrorState, LoadingState } from "@/components/ui/surfaces";
 import { loadResourceDetail } from "@/services/resource-detail";
 
 import { ResourceDetailSummary } from "./resource-detail-summary";
+import { PaymentRequirementViewer } from "./payment-requirement-viewer";
 import { ResourceSchemaViewer } from "./resource-schema-viewer";
 
 export function ResourceDetailPage({ resourceId }: { resourceId: string }) {
@@ -31,6 +32,7 @@ export function ResourceDetailPage({ resourceId }: { resourceId: string }) {
   return (
     <div className="space-y-5">
       <ResourceDetailSummary {...data} />
+      <PaymentRequirementViewer requirement={data.requirement} />
       <ResourceSchemaViewer
         inputSchema={data.resource.inputSchema}
         outputSchema={data.resource.outputSchema}

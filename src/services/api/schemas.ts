@@ -179,6 +179,21 @@ export const resourceSchema = z.object({
 
 export type Resource = z.infer<typeof resourceSchema>;
 
+export const paymentRequirementSchema = z.object({
+  amount: z.string(),
+  assetCode: z.string(),
+  assetIssuer: z.string(),
+  expiresAtLedger: z.number().nullable(),
+  extensions: jsonObjectSchema,
+  network: networkIdSchema,
+  payTo: z.string(),
+  resourceId: z.string(),
+  scheme: z.enum(["exact", "upto"]),
+  x402Version: z.string()
+});
+
+export type PaymentRequirement = z.infer<typeof paymentRequirementSchema>;
+
 export const listResourcesQuerySchema = z.object({
   asset: z.string().optional(),
   cursor: z.string().optional(),

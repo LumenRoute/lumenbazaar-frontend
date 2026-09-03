@@ -1,10 +1,11 @@
 import { apiClient, type LumenBazaarApiClient } from "@/services/api/client";
-import type { Receipt, Resource, Seller } from "@/services/api/schemas";
+import type { PaymentRequirement, Receipt, Resource, Seller } from "@/services/api/schemas";
 
 import { demoReceipts, findDemoResource, findDemoSeller } from "@/fixtures/lumenbazaar";
 
 export type ResourceDetailSnapshot = {
   receipts: Receipt[];
+  requirement: PaymentRequirement;
   resource: Resource;
   seller?: Seller;
   source: "api" | "demo";
@@ -21,6 +22,7 @@ export async function loadResourceDetail(
 
     return {
       receipts: [],
+      requirement: buildPaymentRequirement(resource),
       resource,
       source: "api"
     };
@@ -33,9 +35,25 @@ export async function loadResourceDetail(
 
     return {
       receipts: demoReceipts.filter((receipt) => receipt.resourceId === resourceId),
+      requirement: buildPaymentRequirement(resource),
       resource,
       seller: findDemoSeller(resource.sellerId),
       source: "demo"
     };
   }
+}
+
+export function buildPaymentRequirement(resource: Resource): PaymentRequirement {
+  return {
+    amount: resource.amount,
+    assetCode: resource.assetCode,
+    assetIssuer: resource.assetIssuer,
+    expiresAtLedger: null,
+    extensions: resource.extensions,
+    network: resource.network,
+    payTo: resource.payTo,
+    resourceId: resource.id,
+    scheme: "exact",
+    x402Version: "1"
+  };
 }

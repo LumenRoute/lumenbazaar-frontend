@@ -4,6 +4,7 @@ import {
   resourceSchema,
   sellerSchema,
   type ConformanceRun,
+  type PaymentRequirement,
   type Receipt,
   type Resource,
   type Seller
@@ -137,11 +138,11 @@ export const demoResources: Resource[] = [
   })
 ];
 
-export const demoPaymentRequirements = demoResources.map((resource) => ({
+export const demoPaymentRequirements: PaymentRequirement[] = demoResources.map((resource) => ({
   amount: resource.amount,
   assetCode: resource.assetCode,
   assetIssuer: resource.assetIssuer,
-  expiresAtLedger: 0,
+  expiresAtLedger: null,
   extensions: resource.extensions,
   network: resource.network,
   payTo: resource.payTo,
