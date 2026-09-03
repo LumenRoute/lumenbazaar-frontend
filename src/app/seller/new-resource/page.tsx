@@ -1,12 +1,30 @@
-import { PlaceholderPage } from "@/components/layout/placeholder-page";
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useCallback } from "react";
+
+import { ResourceWizard, type WizardStep } from "@/components/seller/resource-wizard";
+import { clearDraftFromStorage, type ResourceDraft } from "@/services/resource-creation";
 
 export default function NewResourcePage() {
+  const router = useRouter();
+
+  const handleCancel = useCallback(() => {
+    router.push("/seller");
+  }, [router]);
+
+  const handlePublish = useCallback(async (draft: ResourceDraft) => {
+    // Phase 20 will implement the actual publish logic
+    console.log("Publishing resource draft:", draft);
+
+    // For now, clear the draft and redirect
+    clearDraftFromStorage();
+    router.push("/seller/resources");
+  }, [router]);
+
   return (
-    <PlaceholderPage
-      title="New resource"
-      description="Create a paid endpoint or MCP tool draft with metadata, route templates, schemas, and payment terms."
-      emptyTitle="Resource creation is scheduled"
-      emptyDescription="The draft wizard begins after the seller onboarding and verification flow."
-    />
+    <div className="mx-auto max-w-2xl py-8">
+      <ResourceWizard onCancel={handleCancel} onPublish={handlePublish} />
+    </div>
   );
 }
