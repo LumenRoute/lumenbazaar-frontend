@@ -6,6 +6,7 @@ import { ErrorState, LoadingState } from "@/components/ui/surfaces";
 import { loadResourceDetail } from "@/services/resource-detail";
 
 import { ResourceDetailSummary } from "./resource-detail-summary";
+import { ResourceSchemaViewer } from "./resource-schema-viewer";
 
 export function ResourceDetailPage({ resourceId }: { resourceId: string }) {
   const { data, error, isLoading, refetch } = useQuery({
@@ -27,5 +28,13 @@ export function ResourceDetailPage({ resourceId }: { resourceId: string }) {
     );
   }
 
-  return <ResourceDetailSummary {...data} />;
+  return (
+    <div className="space-y-5">
+      <ResourceDetailSummary {...data} />
+      <ResourceSchemaViewer
+        inputSchema={data.resource.inputSchema}
+        outputSchema={data.resource.outputSchema}
+      />
+    </div>
+  );
 }
