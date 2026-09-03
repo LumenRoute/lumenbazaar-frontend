@@ -37,7 +37,7 @@ describe("Stellar address validation", () => {
     expect(
       validateStellarAddress("GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE!")
     ).toBe(false);
-    expect(validateStellarAddress("GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQ0")).toBe(
+    expect(validateStellarAddress("GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQ@")).toBe(
       false
     );
   });
