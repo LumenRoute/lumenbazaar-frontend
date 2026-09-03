@@ -4,10 +4,6 @@ import { prettyJson } from "@/components/resources/schema-utils";
 
 export type MiddlewareFramework = "express" | "fastify" | "nextjs";
 
-function escapeString(str: string): string {
-  return str.replace(/`/g, "\\`").replace(/\$/g, "\\$");
-}
-
 function getResourceMetadata(draft: ResourceDraft): string {
   const metadata: Record<string, JsonValue> = {
     name: draft.name,
@@ -50,7 +46,6 @@ function getResourceMetadata(draft: ResourceDraft): string {
 
 export function generateExpressSnippet(draft: ResourceDraft): string {
   const resourceMetadata = getResourceMetadata(draft);
-  const escapedMetadata = escapeString(resourceMetadata);
   const routeTemplate = draft.routeTemplate || "/api/resource";
 
   return `import express from "express";
@@ -137,11 +132,6 @@ console.log("Server running on http://localhost:3000");`;
 
 export function generateNextJsSnippet(draft: ResourceDraft): string {
   const resourceMetadata = getResourceMetadata(draft);
-  const routeTemplate = draft.routeTemplate || "/api/resource";
-  const routePath = routeTemplate
-    .replace(/\//g, "_")
-    .replace(/{/g, "[")
-    .replace(/}/g, "]");
 
   return `import { NextRequest, NextResponse } from "next/server";
 import { LumenBazaarMiddleware } from "@lumenbazaar/seller-sdk";

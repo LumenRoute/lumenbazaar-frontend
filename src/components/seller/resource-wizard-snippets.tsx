@@ -5,10 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import {
-  generateSnippet,
-  type MiddlewareFramework
-} from "@/services/middleware-snippets";
+import { generateSnippet, type MiddlewareFramework } from "@/services/middleware-snippets";
 import { type ResourceDraft } from "@/services/resource-creation";
 
 type ResourceWizardSnippetsProps = {
@@ -105,9 +102,15 @@ export function ResourceWizardSnippets({
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
             <p className="font-medium">Setup instructions:</p>
             <ol className="mt-2 list-inside list-decimal space-y-1 text-xs">
-              <li>Install the SDK: <code className="text-blue-700">npm install @lumenbazaar/seller-sdk</code></li>
+              <li>
+                Install the SDK:{" "}
+                <code className="text-blue-700">npm install @lumenbazaar/seller-sdk</code>
+              </li>
               <li>Copy the code snippet above into your project</li>
-              <li>Set environment variables: <code className="text-blue-700">LUMENBAZAAR_API_URL</code></li>
+              <li>
+                Set environment variables:{" "}
+                <code className="text-blue-700">LUMENBAZAAR_API_URL</code>
+              </li>
               <li>Deploy your endpoint to make it accessible</li>
               <li>Return to publish your resource in the catalog</li>
             </ol>
@@ -122,7 +125,9 @@ export function ResourceWizardSnippets({
                 <p className="text-slate-500">{draft.type === "http" ? "HTTP API" : "MCP Tool"}</p>
               </div>
               <div>
-                <p className="font-medium text-slate-700">{draft.amount} {draft.assetCode}</p>
+                <p className="font-medium text-slate-700">
+                  {draft.amount} {draft.assetCode}
+                </p>
                 <p className="text-slate-500">{draft.network}</p>
               </div>
               <div>
@@ -141,7 +146,9 @@ export function ResourceWizardSnippets({
       {/* Navigation */}
       <Card className="p-6">
         <div className="flex items-center justify-between">
-          <p className="text-xs text-slate-500">Framework: {FRAMEWORKS.find((f) => f.id === selectedFramework)?.label}</p>
+          <p className="text-xs text-slate-500">
+            Framework: {FRAMEWORKS.find((f) => f.id === selectedFramework)?.label}
+          </p>
           <div className="flex gap-2">
             <Button onClick={onPrev} variant="secondary" disabled={isLoading} type="button">
               ← Back

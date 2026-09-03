@@ -124,7 +124,7 @@ describe("middleware snippet generation", () => {
       });
 
       const expressSnippet = generateExpressSnippet(testDraft);
-      expect(expressSnippet).toContain("/api/v1/resource/:id/details");
+      expect(expressSnippet).toContain("/api/v1/resource/:param/details");
     });
   });
 });

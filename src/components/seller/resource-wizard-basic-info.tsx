@@ -6,10 +6,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import {
-  routeTemplateError,
-  type ResourceDraft
-} from "@/services/resource-creation";
+import { routeTemplateError, type ResourceDraft } from "@/services/resource-creation";
 import type { ResourceType } from "@/services/api/schemas";
 
 type ResourceWizardBasicInfoProps = {
@@ -111,7 +108,9 @@ export function ResourceWizardBasicInfo({
               value={draft.name}
               onChange={(e) => onUpdate({ name: e.target.value })}
               className={`w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors ${
-                errors.name ? "border-red-600 focus:ring-red-100" : "border-slate-300 focus:ring-teal-100"
+                errors.name
+                  ? "border-red-600 focus:ring-red-100"
+                  : "border-slate-300 focus:ring-teal-100"
               } focus:border-teal-700 focus:ring-2`}
             />
             {errors.name ? <p className="text-xs text-red-600">{errors.name}</p> : null}
@@ -128,10 +127,14 @@ export function ResourceWizardBasicInfo({
               value={draft.description}
               onChange={(e) => onUpdate({ description: e.target.value })}
               className={`min-h-28 w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors ${
-                errors.description ? "border-red-600 focus:ring-red-100" : "border-slate-300 focus:ring-teal-100"
+                errors.description
+                  ? "border-red-600 focus:ring-red-100"
+                  : "border-slate-300 focus:ring-teal-100"
               } focus:border-teal-700 focus:ring-2`}
             />
-            {errors.description ? <p className="text-xs text-red-600">{errors.description}</p> : null}
+            {errors.description ? (
+              <p className="text-xs text-red-600">{errors.description}</p>
+            ) : null}
             <p className="text-xs text-slate-500">{draft.description.length}/1000 characters</p>
           </label>
 
@@ -145,7 +148,9 @@ export function ResourceWizardBasicInfo({
               value={draft.url}
               onChange={(e) => onUpdate({ url: e.target.value })}
               className={`w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors ${
-                errors.url ? "border-red-600 focus:ring-red-100" : "border-slate-300 focus:ring-teal-100"
+                errors.url
+                  ? "border-red-600 focus:ring-red-100"
+                  : "border-slate-300 focus:ring-teal-100"
               } focus:border-teal-700 focus:ring-2`}
             />
             {errors.url ? <p className="text-xs text-red-600">{errors.url}</p> : null}
@@ -163,11 +168,13 @@ export function ResourceWizardBasicInfo({
                   value={draft.routeTemplate}
                   onChange={(e) => onUpdate({ routeTemplate: e.target.value })}
                   className={`w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors ${
-                    errors.routeTemplate ? "border-red-600 focus:ring-red-100" : "border-slate-300 focus:ring-teal-100"
+                    errors.routeTemplate
+                      ? "border-red-600 focus:ring-red-100"
+                      : "border-slate-300 focus:ring-teal-100"
                   } focus:border-teal-700 focus:ring-2`}
                 />
                 <p className="text-xs text-slate-500">
-                  Start with / and use {'{'} curly braces {'}'} for parameters
+                  Start with / and use {"{"} curly braces {"}"} for parameters
                 </p>
               </>
             ) : (
@@ -178,7 +185,9 @@ export function ResourceWizardBasicInfo({
                   value={draft.routeTemplate}
                   onChange={(e) => onUpdate({ routeTemplate: e.target.value })}
                   className={`w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors ${
-                    errors.routeTemplate ? "border-red-600 focus:ring-red-100" : "border-slate-300 focus:ring-teal-100"
+                    errors.routeTemplate
+                      ? "border-red-600 focus:ring-red-100"
+                      : "border-slate-300 focus:ring-teal-100"
                   } focus:border-teal-700 focus:ring-2`}
                 />
                 <p className="text-xs text-slate-500">Format: mcp://server-name/tool-name</p>

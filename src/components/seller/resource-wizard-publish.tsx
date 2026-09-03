@@ -118,12 +118,13 @@ export function ResourceWizardPublish({
             </div>
             <h2 className="text-2xl font-bold text-slate-950">Resource published</h2>
             <p className="mt-2 text-slate-600">
-              Your resource has been successfully published to the catalog and is now available for buyers.
+              Your resource has been successfully published to the catalog and is now available for
+              buyers.
             </p>
           </div>
 
           <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-            <p className="text-sm font-medium text-green-900">What's next?</p>
+            <p className="text-sm font-medium text-green-900">What&apos;s next?</p>
             <ul className="mt-2 space-y-1 text-sm text-green-800">
               <li>• Your resource is being indexed and will appear in search results</li>
               <li>• Buyers can now discover and test your resource</li>

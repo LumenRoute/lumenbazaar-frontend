@@ -330,14 +330,22 @@ export type CreateResourceInput = z.infer<typeof createResourceInputSchema>;
 
 export const resourceValidationResultSchema = z.object({
   valid: z.boolean(),
-  errors: z.array(z.object({
-    field: z.string(),
-    message: z.string()
-  })).optional(),
-  warnings: z.array(z.object({
-    field: z.string(),
-    message: z.string()
-  })).optional()
+  errors: z
+    .array(
+      z.object({
+        field: z.string(),
+        message: z.string()
+      })
+    )
+    .optional(),
+  warnings: z
+    .array(
+      z.object({
+        field: z.string(),
+        message: z.string()
+      })
+    )
+    .optional()
 });
 
 export type ResourceValidationResult = z.infer<typeof resourceValidationResultSchema>;

@@ -22,7 +22,7 @@ type ResourceWizardPricingProps = {
 const STELLAR_ADDRESS_REGEX = /^G[A-Z2-7]{56}$/;
 
 export function validateStellarAddress(address: string): boolean {
-  return STELLAR_ADDRESS_REGEX.test(address);
+  return STELLAR_ADDRESS_REGEX.test(address.toUpperCase());
 }
 
 export function ResourceWizardPricing({
@@ -43,9 +43,13 @@ export function ResourceWizardPricing({
 
   // Get current network config to show assets
   const currentNetwork = draft.network ? stellarNetworks[draft.network] : null;
-  const availableAssets = networksData?.networks
-    .find((n) => n.id === draft.network)
-    ?.assets || [{ code: currentNetwork?.defaultAssetCode || "USDC", issuer: currentNetwork?.defaultAssetIssuer || "", decimals: 7 }];
+  const availableAssets = networksData?.networks.find((n) => n.id === draft.network)?.assets || [
+    {
+      code: currentNetwork?.defaultAssetCode || "USDC",
+      issuer: currentNetwork?.defaultAssetIssuer || "",
+      decimals: 7
+    }
+  ];
 
   // Initialize with default values if not set
   useEffect(() => {
@@ -211,9 +215,7 @@ export function ResourceWizardPricing({
                 <p className="text-xs text-green-700">✓ Valid Stellar address</p>
               </div>
             ) : null}
-            <p className="text-xs text-slate-500">
-              Payments will be sent to this Stellar address
-            </p>
+            <p className="text-xs text-slate-500">Payments will be sent to this Stellar address</p>
           </label>
         </div>
 
@@ -221,7 +223,10 @@ export function ResourceWizardPricing({
           <div className="text-xs text-slate-500">
             {draft.amount && draft.assetCode ? (
               <span>
-                Price: <span className="font-semibold">{draft.amount} {draft.assetCode}</span>
+                Price:{" "}
+                <span className="font-semibold">
+                  {draft.amount} {draft.assetCode}
+                </span>
               </span>
             ) : null}
           </div>

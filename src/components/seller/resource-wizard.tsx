@@ -1,6 +1,5 @@
 "use client";
 
-import { AlertCircle, ChevronLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -43,6 +42,7 @@ export function ResourceWizard({ onCancel, onPublish }: ResourceWizardProps) {
   // Load draft from storage on mount
   useEffect(() => {
     const stored = loadDraftFromStorage();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraft(stored || createEmptyDraft());
   }, []);
 
@@ -50,6 +50,7 @@ export function ResourceWizard({ onCancel, onPublish }: ResourceWizardProps) {
   useEffect(() => {
     if (draft && unsavedChanges) {
       saveDraftToStorage(draft);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUnsavedChanges(false);
     }
   }, [draft, unsavedChanges]);

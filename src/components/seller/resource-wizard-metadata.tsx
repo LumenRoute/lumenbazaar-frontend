@@ -42,7 +42,6 @@ export function ResourceWizardMetadata({
   isLoading = false
 }: ResourceWizardMetadataProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [copied, setCopied] = useState<string | null>(null);
 
   const inputSchema = draft.inputSchema || DEFAULT_INPUT_SCHEMA;
   const outputSchema = draft.outputSchema || DEFAULT_OUTPUT_SCHEMA;
@@ -60,7 +59,7 @@ export function ResourceWizardMetadata({
         delete newErrors.inputSchema;
         return newErrors;
       });
-    } catch (err) {
+    } catch {
       setErrors((prev) => ({
         ...prev,
         inputSchema: "Invalid JSON"
@@ -77,7 +76,7 @@ export function ResourceWizardMetadata({
         delete newErrors.outputSchema;
         return newErrors;
       });
-    } catch (err) {
+    } catch {
       setErrors((prev) => ({
         ...prev,
         outputSchema: "Invalid JSON"
@@ -97,12 +96,6 @@ export function ResourceWizardMetadata({
         }
       }
     });
-  }
-
-  function copyToClipboard(text: string, id: string) {
-    navigator.clipboard.writeText(text);
-    setCopied(id);
-    setTimeout(() => setCopied(null), 2000);
   }
 
   function validateForm(): boolean {
@@ -208,7 +201,9 @@ export function ResourceWizardMetadata({
               <div className="flex items-center justify-between">
                 <p className="text-xs font-medium text-slate-700">Input example</p>
                 <button
-                  onClick={() => copyToClipboard(prettyJson(inputExample), "input")}
+                  onClick={() => {
+                    navigator.clipboard.writeText(prettyJson(inputExample));
+                  }}
                   className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                   type="button"
                   title="Copy to clipboard"
@@ -225,7 +220,9 @@ export function ResourceWizardMetadata({
               <div className="flex items-center justify-between">
                 <p className="text-xs font-medium text-slate-700">Output example</p>
                 <button
-                  onClick={() => copyToClipboard(prettyJson(outputExample), "output")}
+                  onClick={() => {
+                    navigator.clipboard.writeText(prettyJson(outputExample));
+                  }}
                   className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                   type="button"
                   title="Copy to clipboard"
@@ -286,7 +283,8 @@ export function ResourceWizardMetadata({
       <Card className="p-6">
         <div className="flex items-center justify-between">
           <div className="text-xs text-slate-500">
-            Schemas: {validation.inputValid && validation.outputValid ? (
+            Schemas:{" "}
+            {validation.inputValid && validation.outputValid ? (
               <Badge tone="success">Valid</Badge>
             ) : (
               <Badge tone="warning">Review required</Badge>

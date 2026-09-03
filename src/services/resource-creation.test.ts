@@ -38,9 +38,7 @@ describe("resource creation service", () => {
     describe("MCP routes", () => {
       it("accepts valid MCP routes", () => {
         expect(validateRouteTemplate("mcp://server/tool", "mcp")).toBe(true);
-        expect(validateRouteTemplate("mcp://lumen-rag-demo/search_stellar_docs", "mcp")).toBe(
-          true
-        );
+        expect(validateRouteTemplate("mcp://lumen-rag-demo/search_stellar_docs", "mcp")).toBe(true);
         expect(validateRouteTemplate("mcp://my.server/my_tool", "mcp")).toBe(true);
       });
 

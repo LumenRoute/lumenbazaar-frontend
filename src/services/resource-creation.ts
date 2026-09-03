@@ -1,12 +1,7 @@
 import { z } from "zod";
 
 import { networkIdSchema } from "@/config/networks";
-import {
-  jsonObjectSchema,
-  resourceStatusSchema,
-  resourceTypeSchema,
-  type ResourceType
-} from "@/services/api/schemas";
+import { jsonObjectSchema, resourceTypeSchema, type ResourceType } from "@/services/api/schemas";
 
 // Route template validation for both HTTP and MCP
 export function validateRouteTemplate(template: string, type: ResourceType): boolean {
@@ -77,32 +72,35 @@ export const resourceDraftSchema = z.object({
 export type ResourceDraft = z.infer<typeof resourceDraftSchema>;
 
 // Schema for final validation before publishing
-export const resourceDraftPublishSchema = resourceDraftSchema.refine(
-  (draft) => draft.name.trim().length > 0,
-  { message: "Resource name is required", path: ["name"] }
-).refine(
-  (draft) => draft.description.trim().length > 0,
-  { message: "Description is required", path: ["description"] }
-).refine(
-  (draft) => draft.url.trim().length > 0,
-  { message: "URL is required", path: ["url"] }
-).refine(
-  (draft) => {
-    try {
-      new URL(draft.url);
-      return true;
-    } catch {
-      return false;
-    }
-  },
-  { message: "Must be a valid URL", path: ["url"] }
-).refine(
-  (draft) => draft.routeTemplate.trim().length > 0,
-  { message: "Route template is required", path: ["routeTemplate"] }
-).refine(
-  (draft) => !routeTemplateError(draft.routeTemplate, draft.type),
-  { message: "Invalid route template", path: ["routeTemplate"] }
-);
+export const resourceDraftPublishSchema = resourceDraftSchema
+  .refine((draft) => draft.name.trim().length > 0, {
+    message: "Resource name is required",
+    path: ["name"]
+  })
+  .refine((draft) => draft.description.trim().length > 0, {
+    message: "Description is required",
+    path: ["description"]
+  })
+  .refine((draft) => draft.url.trim().length > 0, { message: "URL is required", path: ["url"] })
+  .refine(
+    (draft) => {
+      try {
+        new URL(draft.url);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: "Must be a valid URL", path: ["url"] }
+  )
+  .refine((draft) => draft.routeTemplate.trim().length > 0, {
+    message: "Route template is required",
+    path: ["routeTemplate"]
+  })
+  .refine((draft) => !routeTemplateError(draft.routeTemplate, draft.type), {
+    message: "Invalid route template",
+    path: ["routeTemplate"]
+  });
 
 export function createEmptyDraft(): ResourceDraft {
   const now = new Date().toISOString();

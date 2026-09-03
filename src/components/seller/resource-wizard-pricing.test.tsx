@@ -34,9 +34,9 @@ describe("Stellar address validation", () => {
   });
 
   it("rejects addresses with invalid characters", () => {
-    expect(validateStellarAddress("GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE!")).toBe(
-      false
-    );
+    expect(
+      validateStellarAddress("GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE!")
+    ).toBe(false);
     expect(validateStellarAddress("GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQ0")).toBe(
       false
     );
