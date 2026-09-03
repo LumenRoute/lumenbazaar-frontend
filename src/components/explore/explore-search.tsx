@@ -7,8 +7,10 @@ import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card, CardBody } from "@/components/ui/card";
+import { ResourceCard } from "@/components/resources/resource-card";
 import { EmptyState } from "@/components/ui/surfaces";
+import { findDemoSeller } from "@/fixtures/lumenbazaar";
 import { queryKeys } from "@/services/api/query";
 import { searchCatalog, type ExploreSearchInput, type ResourceSort } from "@/services/catalog";
 
@@ -215,21 +217,12 @@ export function ExploreSearch({ initialFilters, initialQuery, initialSort }: Exp
 
       <div className="grid gap-3" aria-live="polite">
         {data?.resources.map((resource) => (
-          <Card key={resource.id}>
-            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-slate-950">{resource.name}</h2>
-                <p className="mt-1 text-sm text-slate-600">{resource.description}</p>
-              </div>
-              <Badge tone={resource.type === "http" ? "info" : "neutral"}>{resource.type}</Badge>
-            </CardHeader>
-            <CardBody className="grid gap-3 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-4">
-              <span>{resource.network}</span>
-              <span>{resource.assetCode}</span>
-              <span>{resource.amount}</span>
-              <span className="truncate">{resource.routeTemplate}</span>
-            </CardBody>
-          </Card>
+          <ResourceCard
+            key={resource.id}
+            partialResults={data.partialResults}
+            resource={resource}
+            seller={findDemoSeller(resource.sellerId)}
+          />
         ))}
       </div>
 
