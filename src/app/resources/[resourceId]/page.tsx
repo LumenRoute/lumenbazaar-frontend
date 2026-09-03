@@ -1,6 +1,7 @@
-import { PlaceholderPage } from "@/components/layout/placeholder-page";
+import { PageHeader } from "@/components/layout/page-header";
+import { ResourceDetailPage as ResourceDetailClientPage } from "@/components/resources/resource-detail-page";
 
-export default async function ResourceDetailPage({
+export default async function ResourceDetailRoute({
   params
 }: {
   params: Promise<{ resourceId: string }>;
@@ -8,11 +9,12 @@ export default async function ResourceDetailPage({
   const { resourceId } = await params;
 
   return (
-    <PlaceholderPage
-      title="Resource detail"
-      description={`Inspect payment terms, schemas, endpoint routing, and public settlement history for ${resourceId}.`}
-      emptyTitle="Resource details are being prepared"
-      emptyDescription="This route will render exact x402 requirements and schema examples once the resource viewer is added."
-    />
+    <>
+      <PageHeader
+        title="Resource detail"
+        description={`Inspect payment terms, schemas, endpoint routing, and public settlement history for ${resourceId}.`}
+      />
+      <ResourceDetailClientPage resourceId={resourceId} />
+    </>
   );
 }
