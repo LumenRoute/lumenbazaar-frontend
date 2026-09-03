@@ -1,0 +1,26 @@
+name: Feature
+description: Request a focused LumenBazaar frontend change
+title: "[Frontend] "
+labels: ["frontend"]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Explain the user, route, and workflow affected.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: List the files, routes, or components expected to change.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: List observable requirements and tests.
+    validations:
+      required: true
