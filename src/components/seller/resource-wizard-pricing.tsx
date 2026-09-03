@@ -22,7 +22,8 @@ type ResourceWizardPricingProps = {
 const STELLAR_ADDRESS_REGEX = /^G[A-Z2-7]{56}$/;
 
 export function validateStellarAddress(address: string): boolean {
-  return STELLAR_ADDRESS_REGEX.test(address.toUpperCase());
+  const normalized = address.toUpperCase().trim();
+  return STELLAR_ADDRESS_REGEX.test(normalized);
 }
 
 export function ResourceWizardPricing({

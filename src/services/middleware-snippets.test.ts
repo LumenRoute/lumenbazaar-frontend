@@ -35,7 +35,7 @@ describe("middleware snippet generation", () => {
 
     it("includes route template", () => {
       const snippet = generateExpressSnippet(draft);
-      expect(snippet).toContain("/weather/:city");
+      expect(snippet).toContain("/weather/:param");
     });
 
     it("includes network configuration", () => {
