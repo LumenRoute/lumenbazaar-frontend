@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ResourceWizardBasicInfo } from "./resource-wizard-basic-info";
+import { ResourceWizardPricing } from "./resource-wizard-pricing";
 import {
   createEmptyDraft,
   loadDraftFromStorage,
@@ -139,20 +140,14 @@ export function ResourceWizard({ onCancel, onPublish }: ResourceWizardProps) {
           />
         )}
 
-        {currentStep === "pricing" && (
-          <Card className="p-6">
-            <p className="text-slate-600">
-              Pricing step coming in Phase 17. For now, review your basic information and continue.
-            </p>
-            <div className="mt-4 flex gap-2">
-              <Button onClick={handlePrev} variant="secondary" type="button">
-                ← Back
-              </Button>
-              <Button onClick={handleNext} type="button">
-                Continue to metadata →
-              </Button>
-            </div>
-          </Card>
+        {currentStep === "pricing" && draft && (
+          <ResourceWizardPricing
+            draft={draft}
+            onUpdate={handleUpdate}
+            onNext={handleNext}
+            onPrev={handlePrev}
+            isLoading={isLoading}
+          />
         )}
 
         {currentStep === "metadata" && (
