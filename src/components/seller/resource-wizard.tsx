@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { ResourceWizardBasicInfo } from "./resource-wizard-basic-info";
 import { ResourceWizardPricing } from "./resource-wizard-pricing";
 import { ResourceWizardMetadata } from "./resource-wizard-metadata";
+import { ResourceWizardSnippets } from "./resource-wizard-snippets";
 import {
   createEmptyDraft,
   loadDraftFromStorage,
@@ -161,20 +162,13 @@ export function ResourceWizard({ onCancel, onPublish }: ResourceWizardProps) {
           />
         )}
 
-        {currentStep === "snippets" && (
-          <Card className="p-6">
-            <p className="text-slate-600">
-              Integration snippets coming in Phase 19. For now, continue to publish.
-            </p>
-            <div className="mt-4 flex gap-2">
-              <Button onClick={handlePrev} variant="secondary" type="button">
-                ← Back
-              </Button>
-              <Button onClick={handleNext} type="button">
-                Continue to publish →
-              </Button>
-            </div>
-          </Card>
+        {currentStep === "snippets" && draft && (
+          <ResourceWizardSnippets
+            draft={draft}
+            onNext={handleNext}
+            onPrev={handlePrev}
+            isLoading={isLoading}
+          />
         )}
 
         {currentStep === "publish" && draft && (
