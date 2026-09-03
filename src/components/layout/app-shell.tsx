@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 
 import { loadRuntimeConfig } from "@/config/runtime";
+import { WalletStatus } from "@/components/wallet/wallet-status";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -45,9 +46,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <span className="block text-xs text-slate-500">Stellar x402 dashboard</span>
               </span>
             </Link>
-            <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
-              {network.label}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
+                {network.label}
+              </div>
+              <WalletStatus />
             </div>
           </div>
           <nav aria-label="Primary navigation" className="overflow-x-auto">
