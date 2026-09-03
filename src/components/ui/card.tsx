@@ -1,7 +1,7 @@
 import { cn } from "@/lib/cn";
 
 type CardProps = {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   className?: string;
 };
 
