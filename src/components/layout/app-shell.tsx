@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+import { loadRuntimeConfig } from "@/config/runtime";
+
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/explore", icon: Compass, label: "Explore" },
@@ -26,6 +28,9 @@ const navItems = [
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const config = loadRuntimeConfig();
+  const network = config.networks[config.defaultNetwork];
+
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
@@ -42,7 +47,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
             <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
               <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
-              Testnet first
+              {network.label}
             </div>
           </div>
           <nav aria-label="Primary navigation" className="overflow-x-auto">
