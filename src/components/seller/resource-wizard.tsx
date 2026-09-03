@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ResourceWizardBasicInfo } from "./resource-wizard-basic-info";
 import { ResourceWizardPricing } from "./resource-wizard-pricing";
+import { ResourceWizardMetadata } from "./resource-wizard-metadata";
 import {
   createEmptyDraft,
   loadDraftFromStorage,
@@ -150,20 +151,14 @@ export function ResourceWizard({ onCancel, onPublish }: ResourceWizardProps) {
           />
         )}
 
-        {currentStep === "metadata" && (
-          <Card className="p-6">
-            <p className="text-slate-600">
-              Metadata step coming in Phase 18. For now, continue to the next step.
-            </p>
-            <div className="mt-4 flex gap-2">
-              <Button onClick={handlePrev} variant="secondary" type="button">
-                ← Back
-              </Button>
-              <Button onClick={handleNext} type="button">
-                Continue to integration →
-              </Button>
-            </div>
-          </Card>
+        {currentStep === "metadata" && draft && (
+          <ResourceWizardMetadata
+            draft={draft}
+            onUpdate={handleUpdate}
+            onNext={handleNext}
+            onPrev={handlePrev}
+            isLoading={isLoading}
+          />
         )}
 
         {currentStep === "snippets" && (
