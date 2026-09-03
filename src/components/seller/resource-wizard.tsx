@@ -9,11 +9,13 @@ import { ResourceWizardBasicInfo } from "./resource-wizard-basic-info";
 import { ResourceWizardPricing } from "./resource-wizard-pricing";
 import { ResourceWizardMetadata } from "./resource-wizard-metadata";
 import { ResourceWizardSnippets } from "./resource-wizard-snippets";
+import { ResourceWizardPublish } from "./resource-wizard-publish";
 import {
   createEmptyDraft,
   loadDraftFromStorage,
   saveDraftToStorage,
   updateDraft,
+  clearDraftFromStorage,
   type ResourceDraft
 } from "@/services/resource-creation";
 
@@ -85,6 +87,8 @@ export function ResourceWizard({ onCancel, onPublish }: ResourceWizardProps) {
     try {
       if (draft) {
         onPublish?.(draft);
+        // Clear draft after successful publish
+        clearDraftFromStorage();
       }
     } finally {
       setIsLoading(false);
@@ -172,53 +176,12 @@ export function ResourceWizard({ onCancel, onPublish }: ResourceWizardProps) {
         )}
 
         {currentStep === "publish" && draft && (
-          <Card className="space-y-6 p-6">
-            <div className="space-y-4">
-              <div className="rounded-md bg-blue-50 p-4">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="h-5 w-5 flex-shrink-0 text-blue-600 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-blue-900">Ready to publish</p>
-                    <p className="mt-1 text-sm text-blue-800">
-                      Your resource draft is complete. Publishing will validate it against the backend
-                      and make it available in the catalog.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2 border-t border-slate-200 pt-4">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs text-slate-500">Resource name</p>
-                    <p className="font-medium text-slate-950">{draft.name}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Type</p>
-                    <p className="font-medium text-slate-950">{draft.type === "http" ? "HTTP API" : "MCP Tool"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Endpoint</p>
-                    <p className="break-all font-medium text-slate-950">{draft.url}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Route template</p>
-                    <p className="break-all font-medium text-slate-950">{draft.routeTemplate}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-2 border-t border-slate-200 pt-6">
-              <Button onClick={handlePrev} variant="secondary" type="button">
-                <ChevronLeft aria-hidden="true" className="h-4 w-4" />
-                Back
-              </Button>
-              <Button onClick={handlePublish} disabled={isLoading} type="button">
-                Publish resource
-              </Button>
-            </div>
-          </Card>
+          <ResourceWizardPublish
+            draft={draft}
+            onPrev={handlePrev}
+            onPublish={handlePublish}
+            isLoading={isLoading}
+          />
         )}
       </div>
 

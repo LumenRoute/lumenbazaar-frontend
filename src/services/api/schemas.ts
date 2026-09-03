@@ -309,3 +309,35 @@ export const conformanceRunSchema = z.object({
 });
 
 export type ConformanceRun = z.infer<typeof conformanceRunSchema>;
+
+export const createResourceInputSchema = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().min(1).max(1000),
+  type: resourceTypeSchema,
+  url: z.string().url(),
+  routeTemplate: z.string().min(1),
+  network: networkIdSchema,
+  assetCode: z.string().min(1),
+  assetIssuer: z.string().min(1),
+  amount: z.string().min(1),
+  payTo: z.string().min(1),
+  inputSchema: jsonObjectSchema,
+  outputSchema: jsonObjectSchema,
+  extensions: jsonObjectSchema.optional()
+});
+
+export type CreateResourceInput = z.infer<typeof createResourceInputSchema>;
+
+export const resourceValidationResultSchema = z.object({
+  valid: z.boolean(),
+  errors: z.array(z.object({
+    field: z.string(),
+    message: z.string()
+  })).optional(),
+  warnings: z.array(z.object({
+    field: z.string(),
+    message: z.string()
+  })).optional()
+});
+
+export type ResourceValidationResult = z.infer<typeof resourceValidationResultSchema>;

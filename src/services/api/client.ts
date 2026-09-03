@@ -5,6 +5,7 @@ import { loadRuntimeConfig } from "@/config/runtime";
 import {
   apiFailureSchema,
   conformanceRunSchema,
+  createResourceInputSchema,
   createSellerInputSchema,
   healthSchema,
   listResourcesQuerySchema,
@@ -14,6 +15,7 @@ import {
   receiptSchema,
   resourceSchema,
   resourcesPageSchema,
+  resourceValidationResultSchema,
   searchResourcesQuerySchema,
   searchResultSchema,
   sellerSchema,
@@ -23,6 +25,7 @@ import {
   versionSchema,
   type ApiFailure,
   type ConformanceRun,
+  type CreateResourceInput,
   type CreateSellerInput,
   type ListResourcesQuery,
   type PaymentPayload,
@@ -30,6 +33,7 @@ import {
   type Receipt,
   type Resource,
   type ResourcesPage,
+  type ResourceValidationResult,
   type SearchResourcesQuery,
   type SearchResult,
   type Seller,
@@ -180,6 +184,22 @@ export class LumenBazaarApiClient {
   getLatestConformanceRun(): Promise<ConformanceRun> {
     return this.request("/v1/conformance/latest", {
       schema: conformanceRunSchema
+    });
+  }
+
+  validateResource(input: CreateResourceInput): Promise<ResourceValidationResult> {
+    return this.request("/v1/discovery/validate", {
+      body: createResourceInputSchema.parse(input),
+      method: "POST",
+      schema: resourceValidationResultSchema
+    });
+  }
+
+  createResource(input: CreateResourceInput): Promise<Resource> {
+    return this.request("/v1/resources", {
+      body: createResourceInputSchema.parse(input),
+      method: "POST",
+      schema: resourceSchema
     });
   }
 
