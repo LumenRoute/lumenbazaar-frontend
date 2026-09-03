@@ -12,7 +12,7 @@ describe("Stellar address validation", () => {
   });
 
   it("accepts valid public network addresses", () => {
-    expect(validateStellarAddress("GBUQWP3BOUZX34ULNQG23RQ6F4BVXEGS34T4023MPM2QUA3S7VNUKAPJ")).toBe(
+    expect(validateStellarAddress("GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ")).toBe(
       true
     );
   });
