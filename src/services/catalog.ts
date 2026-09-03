@@ -1,14 +1,22 @@
 import { apiClient, type LumenBazaarApiClient } from "@/services/api/client";
-import type { Resource, SearchResult } from "@/services/api/schemas";
+import type { Resource, ResourceType, SearchResult } from "@/services/api/schemas";
+import type { NetworkId } from "@/config/networks";
 
 import { demoResources } from "@/fixtures/lumenbazaar";
 
 export type ResourceSort = "relevance" | "price-asc" | "price-desc" | "recent";
 
 export type ExploreSearchInput = {
+  asset?: string;
   cursor?: string;
+  extension?: "bazaar" | "mcp";
+  maxPrice?: string;
+  minPrice?: string;
+  network?: NetworkId;
   q?: string;
+  sellerVerification?: "any" | "verified" | "unverified";
   sort?: ResourceSort;
+  type?: ResourceType;
 };
 
 export type ExploreSearchResult = SearchResult & {
@@ -24,8 +32,15 @@ export async function searchCatalog(
   try {
     const result = await client.searchResources({
       cursor: input.cursor,
+      extension: input.extension,
       limit: 12,
-      q: input.q
+      maxPrice: input.maxPrice,
+      minPrice: input.minPrice,
+      network: input.network,
+      q: input.q,
+      sellerVerified:
+        input.sellerVerification === "any" ? undefined : input.sellerVerification === "verified",
+      type: input.type
     });
 
     return {
@@ -39,7 +54,7 @@ export async function searchCatalog(
       ranking: {
         strategy: "fixture-text-search"
       },
-      resources: sortResources(filterDemoResources(input.q), input.sort ?? "relevance").map(
+      resources: sortResources(filterDemoResources(input), input.sort ?? "relevance").map(
         (resource, index) => ({
           ...resource,
           ranking: {
@@ -81,12 +96,8 @@ export function sortResources<TResource extends Resource>(
   });
 }
 
-function filterDemoResources(query: string | undefined) {
-  const terms = tokenize(query ?? "");
-
-  if (terms.length === 0) {
-    return demoResources;
-  }
+function filterDemoResources(input: ExploreSearchInput) {
+  const terms = tokenize(input.q ?? "");
 
   return demoResources.filter((resource) => {
     const body = [
@@ -100,7 +111,18 @@ function filterDemoResources(query: string | undefined) {
       .join(" ")
       .toLowerCase();
 
-    return terms.every((term) => body.includes(term));
+    return (
+      (terms.length === 0 || terms.every((term) => body.includes(term))) &&
+      (input.network === undefined || resource.network === input.network) &&
+      (input.type === undefined || resource.type === input.type) &&
+      (input.extension === undefined || Boolean(resource.extensions[input.extension])) &&
+      (input.minPrice === undefined || Number(resource.amount) >= Number(input.minPrice)) &&
+      (input.maxPrice === undefined || Number(resource.amount) <= Number(input.maxPrice)) &&
+      (input.sellerVerification === undefined ||
+        input.sellerVerification === "any" ||
+        (input.sellerVerification === "verified" && resource.extensions.trusted === true) ||
+        (input.sellerVerification === "unverified" && resource.extensions.trusted !== true))
+    );
   });
 }
 

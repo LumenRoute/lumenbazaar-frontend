@@ -23,4 +23,22 @@ describe("catalog search", () => {
 
     expect(sorted[0]?.amount).toBe("0.1200000");
   });
+
+  it("applies local filter state in demo mode", async () => {
+    const result = await searchCatalog(
+      {
+        extension: "mcp",
+        maxPrice: "0.20",
+        minPrice: "0.10",
+        network: "stellar:testnet",
+        sellerVerification: "unverified",
+        type: "mcp"
+      },
+      {
+        searchResources: async () => Promise.reject(new Error("offline"))
+      }
+    );
+
+    expect(result.resources.map((resource) => resource.id)).toEqual(["resource_stellar_rag"]);
+  });
 });

@@ -153,6 +153,8 @@ export type VerifyDomainResult = z.infer<typeof verifyDomainResultSchema>;
 
 export const resourceTypeSchema = z.enum(["http", "mcp"]);
 export const resourceStatusSchema = z.enum(["draft", "active", "inactive"]);
+export type ResourceType = z.infer<typeof resourceTypeSchema>;
+export type ResourceStatus = z.infer<typeof resourceStatusSchema>;
 
 export const resourceSchema = z.object({
   amount: z.string(),
@@ -199,11 +201,10 @@ export const resourcesPageSchema = z.object({
 
 export type ResourcesPage = z.infer<typeof resourcesPageSchema>;
 
-export const searchResourcesQuerySchema = listResourcesQuerySchema
-  .omit({ extension: true, maxPrice: true, minPrice: true, status: true })
-  .extend({
-    q: z.string().optional()
-  });
+export const searchResourcesQuerySchema = listResourcesQuerySchema.omit({ status: true }).extend({
+  q: z.string().optional(),
+  sellerVerified: z.boolean().optional()
+});
 
 export type SearchResourcesQuery = z.infer<typeof searchResourcesQuerySchema>;
 
