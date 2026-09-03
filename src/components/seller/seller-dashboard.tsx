@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { loadSellerDashboard } from "@/services/seller-dashboard";
 
+import { SellerDomainVerifier } from "./seller-domain-verifier";
+
 export function SellerDashboard() {
   const snapshot = loadSellerDashboard();
   const readyToPublish =
@@ -97,6 +99,8 @@ export function SellerDashboard() {
             )}
           </CardBody>
         </Card>
+
+        <SellerDomainVerifier domain={snapshot.seller.domain} sellerId={snapshot.seller.id} />
       </div>
     </>
   );
