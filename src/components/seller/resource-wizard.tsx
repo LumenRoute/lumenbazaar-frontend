@@ -23,6 +23,7 @@ export type WizardStep = "basic-info" | "pricing" | "metadata" | "snippets" | "p
 type ResourceWizardProps = {
   onCancel: () => void;
   onPublish?: (draft: ResourceDraft) => void;
+  sellerId: string;
 };
 
 const STEPS: Array<{ id: WizardStep; label: string; description: string }> = [
@@ -33,7 +34,7 @@ const STEPS: Array<{ id: WizardStep; label: string; description: string }> = [
   { id: "publish", label: "Publish", description: "Validate and publish" }
 ];
 
-export function ResourceWizard({ onCancel, onPublish }: ResourceWizardProps) {
+export function ResourceWizard({ onCancel, onPublish, sellerId }: ResourceWizardProps) {
   const [draft, setDraft] = useState<ResourceDraft | null>(null);
   const [currentStep, setCurrentStep] = useState<WizardStep>("basic-info");
   const [isLoading, setIsLoading] = useState(false);
@@ -181,6 +182,7 @@ export function ResourceWizard({ onCancel, onPublish }: ResourceWizardProps) {
             draft={draft}
             onPrev={handlePrev}
             onPublish={handlePublish}
+            sellerId={sellerId}
             isLoading={isLoading}
           />
         )}

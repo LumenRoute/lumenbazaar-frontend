@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { validateStellarAddress } from "./resource-wizard-pricing";
+import { validatePricingDraft, validateStellarAddress } from "./resource-wizard-pricing";
+import { createEmptyDraft, updateDraft } from "@/services/resource-creation";
 
 describe("Stellar address validation", () => {
   it("accepts valid testnet addresses", () => {
@@ -44,5 +45,60 @@ describe("Stellar address validation", () => {
 
   it("rejects empty string", () => {
     expect(validateStellarAddress("")).toBe(false);
+  });
+});
+
+describe("resource pricing validation", () => {
+  const assets = [
+    {
+      code: "USDC",
+      decimals: 7,
+      issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
+    }
+  ];
+  const validDraft = updateDraft(createEmptyDraft(), {
+    amount: "0.05",
+    assetCode: "USDC",
+    assetIssuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+    network: "stellar:testnet",
+    payTo: "GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE"
+  });
+
+  it("accepts a supported network, asset, amount, and recipient", () => {
+    expect(validatePricingDraft(validDraft, assets)).toEqual({});
+  });
+
+  it("rejects unsupported networks", () => {
+    expect(
+      validatePricingDraft(
+        { ...validDraft, network: "stellar:devnet" as typeof validDraft.network },
+        assets,
+        ["stellar:testnet", "stellar:pubnet"]
+      ).network
+    ).toBe("Network is not supported");
+  });
+
+  it("rejects stale assets that are not supported on the selected network", () => {
+    expect(
+      validatePricingDraft(
+        {
+          ...validDraft,
+          assetIssuer: "GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE"
+        },
+        assets
+      ).assetCode
+    ).toBe("Asset must be supported on the selected network");
+  });
+
+  it("rejects malformed and zero amounts before submission", () => {
+    expect(validatePricingDraft({ ...validDraft, amount: "1abc" }, assets).amount).toContain(
+      "positive decimal"
+    );
+    expect(validatePricingDraft({ ...validDraft, amount: "0.00000001" }, assets).amount).toContain(
+      "positive decimal"
+    );
+    expect(validatePricingDraft({ ...validDraft, amount: "0" }, assets).amount).toBe(
+      "Amount must be greater than zero"
+    );
   });
 });

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/services/api/client";
-import { type NetworkId, stellarNetworks } from "@/config/networks";
+import { networkIdSchema, type NetworkId, stellarNetworks } from "@/config/networks";
 import { type ResourceDraft } from "@/services/resource-creation";
 
 type ResourceWizardPricingProps = {
@@ -20,10 +20,58 @@ type ResourceWizardPricingProps = {
 };
 
 const STELLAR_ADDRESS_REGEX = /^G[A-Z2-7]{55}$/;
+const EXACT_AMOUNT_REGEX = /^(?:0|[1-9]\d*)(?:\.\d{1,7})?$/;
+
+export type PricingAsset = {
+  code: string;
+  decimals?: number;
+  issuer: string;
+};
 
 export function validateStellarAddress(address: string): boolean {
   const normalized = address.toUpperCase().trim();
   return STELLAR_ADDRESS_REGEX.test(normalized);
+}
+
+export function validatePricingDraft(
+  draft: Pick<ResourceDraft, "amount" | "assetCode" | "assetIssuer" | "network" | "payTo">,
+  availableAssets: PricingAsset[],
+  supportedNetworks: readonly string[] = Object.keys(stellarNetworks)
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+
+  if (!draft.network) {
+    errors.network = "Network is required";
+  } else if (
+    !supportedNetworks.includes(draft.network) ||
+    !networkIdSchema.safeParse(draft.network).success
+  ) {
+    errors.network = "Network is not supported";
+  }
+
+  if (!draft.assetCode?.trim()) {
+    errors.assetCode = "Asset is required";
+  } else if (!draft.assetIssuer?.trim()) {
+    errors.assetCode = "Asset issuer is required";
+  } else if (!assetIsAvailable(availableAssets, draft.assetCode, draft.assetIssuer)) {
+    errors.assetCode = "Asset must be supported on the selected network";
+  }
+
+  if (!draft.amount?.trim()) {
+    errors.amount = "Amount is required";
+  } else if (!EXACT_AMOUNT_REGEX.test(draft.amount.trim())) {
+    errors.amount = "Amount must be a positive decimal with up to 7 decimal places";
+  } else if (amountToStroops(draft.amount) <= 0n) {
+    errors.amount = "Amount must be greater than zero";
+  }
+
+  if (!draft.payTo?.trim()) {
+    errors.payTo = "Payment recipient is required";
+  } else if (!validateStellarAddress(draft.payTo)) {
+    errors.payTo = "Must be a valid Stellar address (starts with G and 56 characters)";
+  }
+
+  return errors;
 }
 
 export function ResourceWizardPricing({
@@ -60,30 +108,9 @@ export function ResourceWizardPricing({
   }, [networksData, draft.network, onUpdate]);
 
   function validateForm(): boolean {
-    const newErrors: Record<string, string> = {};
-
-    if (!draft.network) {
-      newErrors.network = "Network is required";
-    }
-
-    if (!draft.assetCode?.trim()) {
-      newErrors.assetCode = "Asset is required";
-    }
-
-    if (!draft.amount?.trim()) {
-      newErrors.amount = "Amount is required";
-    } else {
-      const amount = parseFloat(draft.amount);
-      if (isNaN(amount) || amount <= 0) {
-        newErrors.amount = "Amount must be a positive number";
-      }
-    }
-
-    if (!draft.payTo?.trim()) {
-      newErrors.payTo = "Payment recipient is required";
-    } else if (!validateStellarAddress(draft.payTo)) {
-      newErrors.payTo = "Must be a valid Stellar address (starts with G and 56 characters)";
-    }
+    const supportedNetworks =
+      networksData?.networks.map((network) => network.id) ?? Object.keys(stellarNetworks);
+    const newErrors = validatePricingDraft(draft, availableAssets, supportedNetworks);
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -139,9 +166,15 @@ export function ResourceWizardPricing({
             </span>
             <select
               className="min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
-              value={draft.assetCode || ""}
+              value={
+                draft.assetCode && draft.assetIssuer
+                  ? assetKey({ code: draft.assetCode, issuer: draft.assetIssuer })
+                  : ""
+              }
               onChange={(e) => {
-                const selectedAsset = availableAssets.find((a) => a.code === e.target.value);
+                const selectedAsset = availableAssets.find(
+                  (asset) => assetKey(asset) === e.target.value
+                );
                 if (selectedAsset) {
                   onUpdate({
                     assetCode: selectedAsset.code,
@@ -153,7 +186,7 @@ export function ResourceWizardPricing({
             >
               <option value="">Select an asset...</option>
               {availableAssets.map((asset) => (
-                <option key={asset.code} value={asset.code}>
+                <option key={assetKey(asset)} value={assetKey(asset)}>
                   {asset.code} (decimals: {asset.decimals})
                 </option>
               ))}
@@ -243,4 +276,20 @@ export function ResourceWizardPricing({
       </CardBody>
     </Card>
   );
+}
+
+function assetKey(asset: PricingAsset) {
+  return `${asset.code}:${asset.issuer}`;
+}
+
+function assetIsAvailable(assets: PricingAsset[], code: string, issuer: string) {
+  return assets.some(
+    (asset) =>
+      asset.code.toUpperCase() === code.trim().toUpperCase() && asset.issuer === issuer.trim()
+  );
+}
+
+function amountToStroops(amount: string) {
+  const [wholePart = "0", decimalPart = ""] = amount.trim().split(".");
+  return BigInt(wholePart) * 10_000_000n + BigInt(decimalPart.padEnd(7, "0"));
 }

@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { apiClient } from "@/services/api/client";
 import { type ResourceDraft } from "@/services/resource-creation";
-import type { ResourceValidationResult } from "@/services/api/schemas";
+import type { CreateResourceInput, ResourceValidationResult } from "@/services/api/schemas";
 
 type ResourceWizardPublishProps = {
   draft: ResourceDraft;
   onPrev: () => void;
   onPublish?: () => void;
+  sellerId: string;
   isLoading?: boolean;
 };
 
@@ -20,6 +21,7 @@ export function ResourceWizardPublish({
   draft,
   onPrev,
   onPublish,
+  sellerId,
   isLoading = false
 }: ResourceWizardPublishProps) {
   const [validationResult, setValidationResult] = useState<ResourceValidationResult | null>(null);
@@ -31,7 +33,7 @@ export function ResourceWizardPublish({
   // Validate resource on mount
   useEffect(() => {
     async function validate() {
-      if (!draft.name || !draft.network || !draft.assetCode || !draft.payTo) {
+      if (!sellerId || !draft.name || !draft.network || !draft.assetCode || !draft.payTo) {
         setError("Resource is incomplete. Please review all required fields.");
         return;
       }
@@ -40,21 +42,7 @@ export function ResourceWizardPublish({
       setError(null);
 
       try {
-        const result = await apiClient.validateResource({
-          name: draft.name,
-          description: draft.description,
-          type: draft.type,
-          url: draft.url,
-          routeTemplate: draft.routeTemplate,
-          network: draft.network || "stellar:testnet",
-          assetCode: draft.assetCode || "USDC",
-          assetIssuer: draft.assetIssuer || "",
-          amount: draft.amount || "0",
-          payTo: draft.payTo || "",
-          inputSchema: draft.inputSchema || { type: "object", properties: {} },
-          outputSchema: draft.outputSchema || { type: "object", properties: {} },
-          extensions: draft.extensions
-        });
+        const result = await apiClient.validateResource(buildResourceInput(draft, sellerId));
 
         setValidationResult(result);
       } catch (err) {
@@ -62,7 +50,8 @@ export function ResourceWizardPublish({
         setError(message);
         setValidationResult({
           valid: false,
-          errors: [{ field: "general", message }]
+          errors: [{ field: "general", message }],
+          warnings: []
         });
       } finally {
         setValidating(false);
@@ -70,7 +59,7 @@ export function ResourceWizardPublish({
     }
 
     validate();
-  }, [draft]);
+  }, [draft, sellerId]);
 
   async function handlePublish() {
     if (!validationResult?.valid) {
@@ -82,21 +71,7 @@ export function ResourceWizardPublish({
     setError(null);
 
     try {
-      await apiClient.createResource({
-        name: draft.name,
-        description: draft.description,
-        type: draft.type,
-        url: draft.url,
-        routeTemplate: draft.routeTemplate,
-        network: draft.network || "stellar:testnet",
-        assetCode: draft.assetCode || "USDC",
-        assetIssuer: draft.assetIssuer || "",
-        amount: draft.amount || "0",
-        payTo: draft.payTo || "",
-        inputSchema: draft.inputSchema || { type: "object", properties: {} },
-        outputSchema: draft.outputSchema || { type: "object", properties: {} },
-        extensions: draft.extensions
-      });
+      await apiClient.createResource(buildResourceInput(draft, sellerId));
 
       setSuccess(true);
       onPublish?.();
@@ -288,4 +263,23 @@ export function ResourceWizardPublish({
       </Card>
     </div>
   );
+}
+
+function buildResourceInput(draft: ResourceDraft, sellerId: string): CreateResourceInput {
+  return {
+    sellerId,
+    name: draft.name,
+    description: draft.description,
+    type: draft.type,
+    url: draft.url,
+    routeTemplate: draft.routeTemplate,
+    network: draft.network || "stellar:testnet",
+    assetCode: draft.assetCode || "USDC",
+    assetIssuer: draft.assetIssuer || "",
+    amount: draft.amount || "0",
+    payTo: draft.payTo || "",
+    inputSchema: draft.inputSchema || { type: "object", properties: {} },
+    outputSchema: draft.outputSchema || { type: "object", properties: {} },
+    ...(draft.extensions === undefined ? {} : { extensions: draft.extensions })
+  };
 }

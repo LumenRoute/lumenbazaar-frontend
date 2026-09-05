@@ -28,6 +28,7 @@ describe("middleware snippet generation", () => {
 
       expect(snippet).toContain("import express");
       expect(snippet).toContain("@lumenbazaar/seller-sdk");
+      expect(snippet).toContain("createExpressPaymentMiddleware");
       expect(snippet).toContain("resourceMetadata");
       expect(snippet).toContain(draft.name);
       expect(snippet).toContain(draft.amount);
@@ -35,7 +36,7 @@ describe("middleware snippet generation", () => {
 
     it("includes route template", () => {
       const snippet = generateExpressSnippet(draft);
-      expect(snippet).toContain("/weather/:param");
+      expect(snippet).toContain("/weather/:city");
     });
 
     it("includes network configuration", () => {
@@ -50,7 +51,7 @@ describe("middleware snippet generation", () => {
 
       expect(snippet).toContain("import Fastify");
       expect(snippet).toContain("@lumenbazaar/seller-sdk");
-      expect(snippet).toContain("LumenBazaarPlugin");
+      expect(snippet).toContain("createFastifyPaymentMiddleware");
       expect(snippet).toContain(draft.name);
     });
 
@@ -67,14 +68,15 @@ describe("middleware snippet generation", () => {
 
       expect(snippet).toContain("import { NextRequest, NextResponse }");
       expect(snippet).toContain("@lumenbazaar/seller-sdk");
+      expect(snippet).toContain("createNextPaymentResponse");
       expect(snippet).toContain("export async function GET");
       expect(snippet).toContain(draft.name);
     });
 
     it("includes error handling", () => {
       const snippet = generateNextJsSnippet(draft);
-      expect(snippet).toContain("402");
-      expect(snippet).toContain("PAYMENT_REQUIRED");
+      expect(snippet).toContain("createNextPaymentResponse");
+      expect(snippet).toContain("INTERNAL_ERROR");
     });
 
     it("includes runtime configuration", () => {
@@ -109,10 +111,10 @@ describe("middleware snippet generation", () => {
       });
     });
 
-    it("includes environment variable references", () => {
+    it("includes testnet defaults", () => {
       ["express", "fastify", "nextjs"].forEach((fw) => {
         const snippet = generateSnippet(fw as MiddlewareFramework, draft);
-        expect(snippet).toMatch(/LUMENBAZAAR_API_URL|NEXT_PUBLIC_LUMENBAZAAR_API_URL/);
+        expect(snippet).toContain("stellar:testnet");
       });
     });
   });
@@ -124,7 +126,15 @@ describe("middleware snippet generation", () => {
       });
 
       const expressSnippet = generateExpressSnippet(testDraft);
-      expect(expressSnippet).toContain("/api/v1/resource/:param/details");
+      expect(expressSnippet).toContain("/api/v1/resource/:id/details");
+    });
+
+    it("does not reference seller SDK symbols that are not exported", () => {
+      ["express", "fastify", "nextjs"].forEach((fw) => {
+        const snippet = generateSnippet(fw as MiddlewareFramework, draft);
+        expect(snippet).not.toContain("LumenBazaarMiddleware");
+        expect(snippet).not.toContain("LumenBazaarPlugin");
+      });
     });
   });
 });

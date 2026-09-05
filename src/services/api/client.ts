@@ -188,8 +188,10 @@ export class LumenBazaarApiClient {
   }
 
   validateResource(input: CreateResourceInput): Promise<ResourceValidationResult> {
+    const parsed = createResourceInputSchema.parse(input);
+
     return this.request("/v1/discovery/validate", {
-      body: createResourceInputSchema.parse(input),
+      body: toDiscoveryMetadata(parsed),
       method: "POST",
       schema: resourceValidationResultSchema
     });
@@ -228,6 +230,16 @@ export class LumenBazaarApiClient {
 }
 
 export const apiClient = new LumenBazaarApiClient();
+
+function toDiscoveryMetadata(input: CreateResourceInput) {
+  const { sellerId, ...resource } = input;
+
+  return {
+    metadataVersion: 1,
+    sellerId,
+    resource
+  };
+}
 
 function buildUrl(
   baseUrl: string,

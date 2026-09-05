@@ -6,72 +6,57 @@ export type MiddlewareFramework = "express" | "fastify" | "nextjs";
 
 function getResourceMetadata(draft: ResourceDraft): string {
   const metadata: Record<string, JsonValue> = {
-    name: draft.name,
-    type: draft.type
+    metadataVersion: 1,
+    resource: {
+      amount: draft.amount || "0.05",
+      assetCode: draft.assetCode || "USDC",
+      assetIssuer: draft.assetIssuer || "",
+      description: draft.description,
+      extensions: draft.extensions || {},
+      inputSchema: draft.inputSchema || { type: "object", properties: {} },
+      name: draft.name,
+      network: draft.network || "stellar:testnet",
+      outputSchema: draft.outputSchema || { type: "object", properties: {} },
+      payTo: draft.payTo || "",
+      routeTemplate: draft.routeTemplate,
+      type: draft.type,
+      url: draft.url
+    }
   };
 
-  if (draft.network) {
-    metadata.network = draft.network;
-  }
-
-  if (draft.assetCode || draft.assetIssuer) {
-    metadata.asset = {
-      code: draft.assetCode || null,
-      issuer: draft.assetIssuer || null
-    };
-  }
-
-  if (draft.amount) {
-    metadata.amount = draft.amount;
-  }
-
-  if (draft.payTo) {
-    metadata.payTo = draft.payTo;
-  }
-
-  if (draft.inputSchema) {
-    metadata.inputSchema = draft.inputSchema;
-  }
-
-  if (draft.outputSchema) {
-    metadata.outputSchema = draft.outputSchema;
-  }
-
-  if (draft.extensions) {
-    metadata.extensions = draft.extensions;
-  }
-
   return prettyJson(metadata);
+}
+
+function toFrameworkRoute(routeTemplate: string) {
+  return routeTemplate.replace(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g, ":$1");
 }
 
 export function generateExpressSnippet(draft: ResourceDraft): string {
   const resourceMetadata = getResourceMetadata(draft);
   const routeTemplate = draft.routeTemplate || "/api/resource";
+  const frameworkRoute = toFrameworkRoute(routeTemplate);
 
   return `import express from "express";
-import { LumenBazaarMiddleware } from "@lumenbazaar/seller-sdk";
+import { createExpressPaymentMiddleware, paymentRequirement } from "@lumenbazaar/seller-sdk";
 
 const app = express();
 
 // Resource metadata
 const resourceMetadata = ${resourceMetadata};
 
-// Initialize Lumenbazaar middleware
-const lumenMiddleware = new LumenBazaarMiddleware({
-  sellerSdk: {
-    apiBaseUrl: process.env.LUMENBAZAAR_API_URL || "https://api.testnet.lumenbazaar.dev",
-    network: "${draft.network || "stellar:testnet"}"
-  }
+const requirement = paymentRequirement({
+  network: "${draft.network || "stellar:testnet"}",
+  assetCode: "${draft.assetCode || "USDC"}",
+  assetIssuer: "${draft.assetIssuer || ""}",
+  amount: "${draft.amount || "0.05"}",
+  payTo: "${draft.payTo || ""}"
 });
 
 // Apply payment requirement middleware
-app.use(
-  "${routeTemplate.replace(/{[^}]+}/g, ":param")}",
-  lumenMiddleware.requirePayment(resourceMetadata)
-);
+app.use("${frameworkRoute}", createExpressPaymentMiddleware(requirement));
 
 // Your resource endpoint
-app.get("${routeTemplate.replace(/{[^}]+}/g, ":param")}", (req, res) => {
+app.get("${frameworkRoute}", (req, res) => {
   // Payment requirement is already enforced by middleware
   // req.payment contains verified payment information
   
@@ -91,30 +76,35 @@ app.listen(3000, () => {
 export function generateFastifySnippet(draft: ResourceDraft): string {
   const resourceMetadata = getResourceMetadata(draft);
   const routeTemplate = draft.routeTemplate || "/api/resource";
+  const frameworkRoute = toFrameworkRoute(routeTemplate);
 
   return `import Fastify from "fastify";
-import { LumenBazaarPlugin } from "@lumenbazaar/seller-sdk";
+import { createFastifyPaymentMiddleware, paymentRequirement } from "@lumenbazaar/seller-sdk";
 
 const fastify = Fastify({ logger: true });
 
 // Resource metadata
 const resourceMetadata = ${resourceMetadata};
 
-// Register Lumenbazaar plugin
-await fastify.register(LumenBazaarPlugin, {
-  apiBaseUrl: process.env.LUMENBAZAAR_API_URL || "https://api.testnet.lumenbazaar.dev",
-  network: "${draft.network || "stellar:testnet"}"
+const requirement = paymentRequirement({
+  network: "${draft.network || "stellar:testnet"}",
+  assetCode: "${draft.assetCode || "USDC"}",
+  assetIssuer: "${draft.assetIssuer || ""}",
+  amount: "${draft.amount || "0.05"}",
+  payTo: "${draft.payTo || ""}"
 });
+
+await fastify.register(createFastifyPaymentMiddleware(requirement));
 
 // Register payment requirement hook
 fastify.addHook("preHandler", async (request, reply) => {
   if (request.url.startsWith("${routeTemplate.split("{")[0]}")) {
-    await fastify.lumenBazaar.requirePayment(request, reply, resourceMetadata);
+    await fastify.lumenBazaar.requirePayment(request, reply);
   }
 });
 
 // Your resource endpoint
-fastify.get("${routeTemplate.replace(/{[^}]+}/g, ":param")}", async (request, reply) => {
+fastify.get("${frameworkRoute}", async (request, reply) => {
   // Payment requirement is already enforced by hook
   // request.payment contains verified payment information
   
@@ -134,36 +124,24 @@ export function generateNextJsSnippet(draft: ResourceDraft): string {
   const resourceMetadata = getResourceMetadata(draft);
 
   return `import { NextRequest, NextResponse } from "next/server";
-import { LumenBazaarMiddleware } from "@lumenbazaar/seller-sdk";
+import { createNextPaymentResponse, paymentRequirement } from "@lumenbazaar/seller-sdk";
 
 // Resource metadata
 const resourceMetadata = ${resourceMetadata};
 
-// Initialize middleware
-const lumenMiddleware = new LumenBazaarMiddleware({
-  apiBaseUrl: process.env.NEXT_PUBLIC_LUMENBAZAAR_API_URL || "https://api.testnet.lumenbazaar.dev",
-  network: "${draft.network || "stellar:testnet"}"
+const requirement = paymentRequirement({
+  network: "${draft.network || "stellar:testnet"}",
+  assetCode: "${draft.assetCode || "USDC"}",
+  assetIssuer: "${draft.assetIssuer || ""}",
+  amount: "${draft.amount || "0.05"}",
+  payTo: "${draft.payTo || ""}"
 });
 
 // Export as API route handler
 export async function GET(request: NextRequest) {
   try {
-    // Verify payment requirement
-    const verification = await lumenMiddleware.verifyPaymentRequirement(
-      request,
-      resourceMetadata
-    );
-
-    if (!verification.accepted) {
-      return NextResponse.json(
-        {
-          error: {
-            code: verification.failure?.code || "PAYMENT_REQUIRED",
-            message: verification.failure?.message || "Payment required"
-          }
-        },
-        { status: 402 }
-      );
+    if (!request.headers.get("x-payment-required")) {
+      return createNextPaymentResponse(requirement);
     }
 
     // Payment verified - return resource

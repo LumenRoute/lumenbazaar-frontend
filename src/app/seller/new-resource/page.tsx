@@ -4,10 +4,12 @@ import { useRouter } from "next/navigation";
 import { useCallback } from "react";
 
 import { ResourceWizard } from "@/components/seller/resource-wizard";
+import { loadSellerDashboard } from "@/services/seller-dashboard";
 import { clearDraftFromStorage, type ResourceDraft } from "@/services/resource-creation";
 
 export default function NewResourcePage() {
   const router = useRouter();
+  const sellerId = loadSellerDashboard().seller.id;
 
   const handleCancel = useCallback(() => {
     router.push("/seller");
@@ -15,10 +17,7 @@ export default function NewResourcePage() {
 
   const handlePublish = useCallback(
     async (draft: ResourceDraft) => {
-      // Phase 20 will implement the actual publish logic
-      console.log("Publishing resource draft:", draft);
-
-      // For now, clear the draft and redirect
+      void draft;
       clearDraftFromStorage();
       router.push("/seller/resources");
     },
@@ -27,7 +26,7 @@ export default function NewResourcePage() {
 
   return (
     <div className="mx-auto max-w-2xl py-8">
-      <ResourceWizard onCancel={handleCancel} onPublish={handlePublish} />
+      <ResourceWizard sellerId={sellerId} onCancel={handleCancel} onPublish={handlePublish} />
     </div>
   );
 }

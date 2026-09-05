@@ -94,4 +94,90 @@ describe("LumenBazaarApiClient", () => {
       status: 404
     });
   });
+
+  it("wraps resource validation payloads as discovery metadata", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({
+        ok: false,
+        errors: [
+          {
+            code: "CATALOG_VALIDATION_FAILED",
+            message: "Route is invalid.",
+            path: ["resource", "routeTemplate"]
+          }
+        ],
+        warnings: []
+      })
+    );
+    const client = new LumenBazaarApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+
+    const result = await client.validateResource(resourcePayload());
+    const calls = fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>;
+    const [, init] = calls[0] ?? [];
+
+    expect(init?.body).toBe(
+      JSON.stringify({
+        metadataVersion: 1,
+        sellerId: "seller_1",
+        resource: {
+          name: "Paid Weather API",
+          description: "Weather data.",
+          type: "http",
+          url: "https://seller.example/weather",
+          routeTemplate: "/weather/{city}",
+          network: "stellar:testnet",
+          assetCode: "USDC",
+          assetIssuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+          amount: "0.05",
+          payTo: "GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE",
+          inputSchema: {
+            type: "object",
+            properties: {}
+          },
+          outputSchema: {
+            type: "object",
+            properties: {}
+          }
+        }
+      })
+    );
+    expect(result).toEqual({
+      valid: false,
+      errors: [
+        {
+          code: "CATALOG_VALIDATION_FAILED",
+          field: "resource.routeTemplate",
+          message: "Route is invalid."
+        }
+      ],
+      warnings: []
+    });
+  });
 });
+
+function resourcePayload() {
+  return {
+    sellerId: "seller_1",
+    name: "Paid Weather API",
+    description: "Weather data.",
+    type: "http" as const,
+    url: "https://seller.example/weather",
+    routeTemplate: "/weather/{city}",
+    network: "stellar:testnet" as const,
+    assetCode: "USDC",
+    assetIssuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+    amount: "0.05",
+    payTo: "GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE",
+    inputSchema: {
+      type: "object",
+      properties: {}
+    },
+    outputSchema: {
+      type: "object",
+      properties: {}
+    }
+  };
+}

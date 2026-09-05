@@ -311,6 +311,7 @@ export const conformanceRunSchema = z.object({
 export type ConformanceRun = z.infer<typeof conformanceRunSchema>;
 
 export const createResourceInputSchema = z.object({
+  sellerId: z.string().min(1),
   name: z.string().min(1).max(120),
   description: z.string().min(1).max(1000),
   type: resourceTypeSchema,
@@ -328,24 +329,30 @@ export const createResourceInputSchema = z.object({
 
 export type CreateResourceInput = z.infer<typeof createResourceInputSchema>;
 
-export const resourceValidationResultSchema = z.object({
-  valid: z.boolean(),
-  errors: z
-    .array(
-      z.object({
-        field: z.string(),
-        message: z.string()
-      })
-    )
-    .optional(),
-  warnings: z
-    .array(
-      z.object({
-        field: z.string(),
-        message: z.string()
-      })
-    )
-    .optional()
-});
+const resourceValidationIssueSchema = z
+  .object({
+    code: z.string().optional(),
+    field: z.string().optional(),
+    message: z.string(),
+    path: z.array(z.string()).optional()
+  })
+  .transform((issue) => ({
+    field: issue.field ?? issue.path?.join(".") ?? issue.code ?? "general",
+    message: issue.message,
+    ...(issue.code === undefined ? {} : { code: issue.code })
+  }));
+
+export const resourceValidationResultSchema = z
+  .object({
+    errors: z.array(resourceValidationIssueSchema).optional(),
+    ok: z.boolean().optional(),
+    valid: z.boolean().optional(),
+    warnings: z.array(resourceValidationIssueSchema).optional()
+  })
+  .transform((result) => ({
+    valid: result.valid ?? result.ok ?? false,
+    errors: result.errors ?? [],
+    warnings: result.warnings ?? []
+  }));
 
 export type ResourceValidationResult = z.infer<typeof resourceValidationResultSchema>;
