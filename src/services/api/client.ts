@@ -20,6 +20,7 @@ import {
   searchResultSchema,
   sellerSchema,
   settlementSchema,
+  settlementRequestSchema,
   supportedSchema,
   verifyDomainResultSchema,
   versionSchema,
@@ -38,6 +39,7 @@ import {
   type SearchResult,
   type Seller,
   type Settlement,
+  type SettlementRequest,
   type VerifyDomainResult
 } from "./schemas";
 
@@ -167,9 +169,9 @@ export class LumenBazaarApiClient {
     });
   }
 
-  settlePayment(payload: PaymentPayload): Promise<Settlement> {
+  settlePayment(payload: SettlementRequest): Promise<Settlement> {
     return this.request("/v1/settle", {
-      body: paymentPayloadSchema.parse(payload),
+      body: settlementRequestSchema.parse(payload),
       method: "POST",
       schema: settlementSchema
     });

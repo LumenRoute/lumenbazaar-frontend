@@ -241,33 +241,68 @@ export const searchResultSchema = z.object({
 
 export type SearchResult = z.infer<typeof searchResultSchema>;
 
+export const exactPaymentPayloadSchema = z.object({
+  amount: z.string(),
+  asset: z.object({
+    code: z.string(),
+    issuer: z.string()
+  }),
+  authorization: z.record(z.string(), z.unknown()).optional(),
+  expiresAtLedger: z.number().int().positive().optional(),
+  memo: z.string().optional(),
+  network: networkIdSchema,
+  payTo: z.string(),
+  paymentHash: z.string().optional(),
+  scheme: z.literal("exact")
+});
+
+export const exactPaymentRequirementsSchema = z.object({
+  amount: z.string(),
+  asset: z
+    .object({
+      code: z.string(),
+      issuer: z.string()
+    })
+    .optional(),
+  network: networkIdSchema,
+  payTo: z.string(),
+  scheme: z.literal("exact")
+});
+
 export const paymentPayloadSchema = z.object({
-  payload: z.record(z.string(), z.unknown()),
-  requirement: z.record(z.string(), z.unknown())
+  currentLedger: z.number().int().nonnegative().optional(),
+  paymentPayload: exactPaymentPayloadSchema,
+  paymentRequirements: exactPaymentRequirementsSchema,
+  resourceId: z.string().optional(),
+  sellerId: z.string().optional()
 });
 
 export type PaymentPayload = z.infer<typeof paymentPayloadSchema>;
 
 export const paymentVerificationSchema = z.object({
-  accepted: z.boolean(),
-  failure: z
-    .object({
-      code: errorCodeSchema,
-      message: z.string()
-    })
-    .nullable(),
+  adapter: z.literal("@x402/stellar"),
+  network: networkIdSchema,
   paymentAttemptId: z.string(),
-  paymentHash: z.string()
+  paymentHash: z.string(),
+  status: z.literal("verified")
 });
 
 export type PaymentVerification = z.infer<typeof paymentVerificationSchema>;
 
+export const settlementRequestSchema = paymentPayloadSchema.extend({
+  paymentAttemptId: z.string().min(1)
+});
+
+export type SettlementRequest = z.infer<typeof settlementRequestSchema>;
+
 export const settlementSchema = z.object({
-  ledger: z.number().nullable(),
+  ledger: z.number(),
+  network: networkIdSchema,
   paymentAttemptId: z.string(),
   receiptId: z.string(),
-  status: z.enum(["pending", "settled", "failed"]),
-  transactionHash: z.string().nullable()
+  settlementId: z.string(),
+  status: z.literal("settled"),
+  transactionHash: z.string()
 });
 
 export type Settlement = z.infer<typeof settlementSchema>;

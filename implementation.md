@@ -337,44 +337,44 @@ Completion check:
 
 - Seller can reconcile recent payment activity. ✓
 
-## Phase 23: Payment Playground Selection
+## Phase 23: Payment Playground Selection ✓
 
 Parts:
 
-- Build `/playground`.
-- Let user select a resource.
-- Generate a sample request from the input schema.
-- Trigger or simulate initial 402 response.
+- Build `/playground`. ✓
+- Let user select a resource. ✓
+- Generate a sample request from the input schema. ✓
+- Trigger or simulate initial 402 response. ✓
 
 Completion check:
 
-- Developer can see the payment requirement generated for a chosen resource.
+- Developer can see the payment requirement generated for a chosen resource. ✓
 
-## Phase 24: Payment Playground Verify
+## Phase 24: Payment Playground Verify ✓
 
 Parts:
 
-- Add authorization simulation path.
-- Add wallet-backed authorization path where backend support exists.
-- Submit payment payload to `/v1/verify`.
-- Show accepted and rejected verification states.
+- Add authorization simulation path. ✓
+- Add wallet-backed authorization path where backend support exists. ✓
+- Submit payment payload to `/v1/verify`. ✓
+- Show accepted and rejected verification states. ✓
 
 Completion check:
 
-- Testnet verification results are visible and machine-readable.
+- Testnet verification results are visible and machine-readable. ✓
 
-## Phase 25: Payment Playground Settle
+## Phase 25: Payment Playground Settle ✓
 
 Parts:
 
-- Retry paid request after verification.
-- Submit settlement through the backend.
-- Show receipt ID, transaction hash, ledger, amount, asset, and seller.
-- Show failure codes for settlement failures.
+- Retry paid request after verification. ✓
+- Submit settlement through the backend. ✓
+- Show receipt ID, transaction hash, ledger, amount, asset, and seller. ✓
+- Show failure codes for settlement failures. ✓
 
 Completion check:
 
-- A full testnet payment simulation can be run from the UI.
+- A full testnet payment simulation can be run from the UI. ✓
 
 ## Phase 26: Transaction Dashboard
 

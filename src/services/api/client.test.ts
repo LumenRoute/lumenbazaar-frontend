@@ -156,6 +156,55 @@ describe("LumenBazaarApiClient", () => {
       warnings: []
     });
   });
+
+  it("serializes verify and settle requests with backend payment fields", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          adapter: "@x402/stellar",
+          network: "stellar:testnet",
+          paymentAttemptId: "attempt_1",
+          paymentHash: "hash_1",
+          status: "verified"
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          ledger: 456,
+          network: "stellar:testnet",
+          paymentAttemptId: "attempt_1",
+          receiptId: "receipt_1",
+          settlementId: "settlement_1",
+          status: "settled",
+          transactionHash: "tx_1"
+        })
+      );
+    const client = new LumenBazaarApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+    const request = paymentPayload();
+
+    await client.verifyPayment(request);
+    await client.settlePayment({ ...request, paymentAttemptId: "attempt_1" });
+
+    const calls = fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>;
+
+    expect(calls[0]?.[0]).toBe("https://api.example.test/v1/verify");
+    expect(JSON.parse(String(calls[0]?.[1].body))).toMatchObject({
+      paymentPayload: {
+        scheme: "exact"
+      },
+      paymentRequirements: {
+        scheme: "exact"
+      }
+    });
+    expect(calls[1]?.[0]).toBe("https://api.example.test/v1/settle");
+    expect(JSON.parse(String(calls[1]?.[1].body))).toMatchObject({
+      paymentAttemptId: "attempt_1"
+    });
+  });
 });
 
 function resourcePayload() {
@@ -178,6 +227,35 @@ function resourcePayload() {
     outputSchema: {
       type: "object",
       properties: {}
+    }
+  };
+}
+
+function paymentPayload() {
+  return {
+    currentLedger: 1,
+    paymentPayload: {
+      amount: "0.05",
+      asset: {
+        code: "USDC",
+        issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
+      },
+      authorization: {
+        simulation: true
+      },
+      network: "stellar:testnet" as const,
+      payTo: "GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE",
+      scheme: "exact" as const
+    },
+    paymentRequirements: {
+      amount: "0.05",
+      asset: {
+        code: "USDC",
+        issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
+      },
+      network: "stellar:testnet" as const,
+      payTo: "GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE",
+      scheme: "exact" as const
     }
   };
 }
