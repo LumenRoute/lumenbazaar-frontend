@@ -311,31 +311,31 @@ Completion check:
 
 - Invalid metadata cannot be published from the UI.
 
-## Phase 21: Seller Resource List
+## Phase 21: Seller Resource List ✓
 
 Parts:
 
-- Build `/seller/resources`.
-- Add table of seller resources.
-- Add status, network, asset, amount, and last indexed time.
-- Add edit, disable, and detail links.
+- Build `/seller/resources`. ✓
+- Add table of seller resources. ✓
+- Add status, network, asset, amount, and last indexed time. ✓
+- Add edit, disable, and detail links. ✓
 
 Completion check:
 
-- Seller can manage published and draft resources.
+- Seller can manage published and draft resources. ✓
 
-## Phase 22: Seller Payments
+## Phase 22: Seller Payments ✓
 
 Parts:
 
-- Build `/seller/payments`.
-- Show payment attempts for the seller.
-- Show verification status, settlement status, amount, asset, and failure reason.
-- Link settled payments to receipts and transaction hashes.
+- Build `/seller/payments`. ✓
+- Show payment attempts for the seller. ✓
+- Show verification status, settlement status, amount, asset, and failure reason. ✓
+- Link settled payments to receipts and transaction hashes. ✓
 
 Completion check:
 
-- Seller can reconcile recent payment activity.
+- Seller can reconcile recent payment activity. ✓
 
 ## Phase 23: Payment Playground Selection
 

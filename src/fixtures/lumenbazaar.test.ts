@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   demoConformanceRun,
   demoDashboardMetrics,
+  demoPaymentAttempts,
   demoPaymentRequirements,
   demoReceipts,
   demoResources,
+  demoSettlements,
   demoSellers,
   findDemoResource,
   findDemoSeller
@@ -16,6 +18,8 @@ describe("LumenBazaar fixtures", () => {
     expect(demoResources).toHaveLength(2);
     expect(demoSellers).toHaveLength(2);
     expect(demoPaymentRequirements).toHaveLength(demoResources.length);
+    expect(demoPaymentAttempts).toHaveLength(3);
+    expect(demoSettlements[0]?.status).toBe("settled");
     expect(demoReceipts[0]?.status).toBe("finalized");
     expect(demoConformanceRun.status).toBe("passed");
   });
