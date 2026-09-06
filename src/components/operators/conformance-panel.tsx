@@ -10,6 +10,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState, LoadingState } from "@/components/ui/surfaces";
 import { queryKeys } from "@/services/api/query";
 import { conformanceEndpointStatus, loadOperatorSnapshot, statusTone } from "@/services/operators";
+import { emptyStateForCollection } from "@/services/ui-state";
 
 const endpointChecks = [
   { endpoint: "/v1/supported", label: "/supported" },
@@ -34,6 +35,7 @@ export function ConformancePanel() {
   const run = snapshot.conformance;
   const exactResults = run.results.filter((result) => result.scheme === "exact");
   const uptoResults = run.results.filter((result) => result.scheme === "upto");
+  const emptyState = emptyStateForCollection("conformance");
 
   return (
     <>
@@ -61,10 +63,7 @@ export function ConformancePanel() {
         </div>
 
         {run.results.length === 0 ? (
-          <EmptyState
-            title="No conformance run available"
-            description="Run the backend conformance suite to publish reviewer-facing endpoint evidence."
-          />
+          <EmptyState title={emptyState.title} description={emptyState.description} />
         ) : (
           <>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

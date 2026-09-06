@@ -50,7 +50,7 @@ export function ResourceCard({ partialResults = false, resource, seller }: Resou
         <dl className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
           <div>
             <dt className="text-slate-500">Seller</dt>
-            <dd className="mt-1 truncate font-medium text-slate-900">
+            <dd className="mt-1 break-all font-medium text-slate-900">
               {seller?.domain ?? resource.sellerId}
             </dd>
           </div>

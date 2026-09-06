@@ -467,58 +467,58 @@ Completion check:
 
 - Frontend routes never become the canonical documentation source. (done)
 
-## Phase 33: Error And State Hardening
+## Phase 33: Error And State Hardening (done)
 
 Parts:
 
-- Normalize API errors into stable UI states.
-- Add empty states for no resources, no payments, and unavailable conformance runs.
-- Add retry actions where safe.
-- Avoid logging payment payloads or sensitive wallet data.
+- Normalize API errors into stable UI states. (done)
+- Add empty states for no resources, no payments, and unavailable conformance runs. (done)
+- Add retry actions where safe. (done)
+- Avoid logging payment payloads or sensitive wallet data. (done)
 
 Completion check:
 
-- Failure states are clear to humans and still preserve machine-readable codes.
+- Failure states are clear to humans and still preserve machine-readable codes. (done)
 
-## Phase 34: Accessibility And Responsiveness
+## Phase 34: Accessibility And Responsiveness (done)
 
 Parts:
 
-- Add keyboard navigation checks.
-- Add labels for form controls.
-- Add responsive tests for mobile and desktop.
-- Fix overflow and truncation for addresses, hashes, and schema content.
+- Add keyboard navigation checks. (done)
+- Add labels for form controls. (done)
+- Add responsive tests for mobile and desktop. (done)
+- Fix overflow and truncation for addresses, hashes, and schema content. (done)
 
 Completion check:
 
-- Primary seller, buyer, operator, and playground flows work on mobile and desktop.
+- Primary seller, buyer, operator, and playground flows work on mobile and desktop. (done)
 
-## Phase 35: Frontend Tests
+## Phase 35: Frontend Tests (done)
 
 Parts:
 
-- Add component unit tests.
-- Add form validation tests.
-- Add API client tests.
-- Add wallet mock tests.
-- Add Playwright flows for explore, resource detail, seller onboarding, playground, and transactions.
+- Add component unit tests. (done)
+- Add form validation tests. (done)
+- Add API client tests. (done)
+- Add wallet mock tests. (done)
+- Add Playwright flows for explore, resource detail, seller onboarding, playground, and transactions. (done)
 
 Completion check:
 
-- CI runs lint, typecheck, unit tests, and Playwright smoke tests.
+- CI runs lint, typecheck, unit tests, and Playwright smoke tests. (done)
 
-## Phase 36: Testnet Release
+## Phase 36: Testnet Release (done)
 
 Parts:
 
-- Configure deployed frontend environment.
-- Connect to testnet backend.
-- Verify resource search, seller onboarding, playground, transactions, operator health, and conformance pages.
-- Document known limitations.
+- Configure deployed frontend environment. (done)
+- Connect to testnet backend. (done)
+- Verify resource search, seller onboarding, playground, transactions, operator health, and conformance pages. (done)
+- Document known limitations. (done)
 
 Completion check:
 
-- Testnet UI is usable by sellers, buyers, agents, operators, and reviewers.
+- Testnet UI is usable by sellers, buyers, agents, operators, and reviewers. (done)
 
 ## Phase 37: Mainnet Readiness
 

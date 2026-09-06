@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm build",
+  "env": {
+    "NEXT_PUBLIC_ENABLE_MAINNET": "false",
+    "NEXT_PUBLIC_ENABLE_MCP_INSPECTOR": "true",
+    "NEXT_PUBLIC_ENABLE_UPTO_SESSIONS": "false",
+    "NEXT_PUBLIC_LUMENBAZAAR_DEFAULT_NETWORK": "stellar:testnet",
+    "NEXT_PUBLIC_LUMENBAZAAR_ENV": "testnet"
+  },
+  "framework": "nextjs",
+  "installCommand": "pnpm install --frozen-lockfile"
+}

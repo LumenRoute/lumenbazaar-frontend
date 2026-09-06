@@ -36,7 +36,9 @@ export function WalletStatus() {
         <Badge tone={wallet.status === "connected" ? "success" : "warning"}>
           {wallet.status === "connected" ? "Wallet connected" : "Network mismatch"}
         </Badge>
-        <span className="max-w-[11rem] truncate text-sm text-slate-700">{wallet.address}</span>
+        <span className="max-w-[11rem] break-all text-sm text-slate-700" title={wallet.address}>
+          {wallet.address}
+        </span>
         {wallet.status === "mismatch" ? (
           <span className="inline-flex items-center gap-1 text-xs text-amber-800">
             <TriangleAlert aria-hidden="true" className="h-3.5 w-3.5" />

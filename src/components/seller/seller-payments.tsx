@@ -13,9 +13,11 @@ import {
   shortHash,
   type PaymentActivity
 } from "@/services/payments";
+import { emptyStateForCollection } from "@/services/ui-state";
 
 export function SellerPayments({ sellerId = "seller_atlas_weather" }: { sellerId?: string }) {
   const activity = loadSellerPaymentActivity(sellerId);
+  const emptyState = emptyStateForCollection("payments");
 
   return (
     <>
@@ -25,10 +27,7 @@ export function SellerPayments({ sellerId = "seller_atlas_weather" }: { sellerId
       />
 
       {activity.length === 0 ? (
-        <EmptyState
-          title="No payment attempts loaded"
-          description="Recent verification and settlement activity will appear here after paid resources receive traffic."
-        />
+        <EmptyState title={emptyState.title} description={emptyState.description} />
       ) : (
         <Card>
           <CardHeader className="flex flex-col gap-1">

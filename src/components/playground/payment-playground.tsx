@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { demoResources } from "@/fixtures/lumenbazaar";
-import { apiClient, ApiClientError } from "@/services/api/client";
+import { apiClient } from "@/services/api/client";
 import type {
   PaymentPayload,
   PaymentVerification,
@@ -33,6 +33,7 @@ import {
   type PlaygroundAuthorizationMode
 } from "@/services/playground";
 import { explorerTransactionUrl, shortHash } from "@/services/payments";
+import { normalizeUiError, redactSensitivePaymentData } from "@/services/ui-state";
 
 export function PaymentPlayground() {
   const [selectedResourceId, setSelectedResourceId] = useState(demoResources[0]?.id ?? "");
@@ -310,7 +311,13 @@ export function PaymentPlayground() {
             </CardHeader>
             <CardBody>
               <pre className="max-h-[34rem] overflow-auto rounded-md bg-slate-950 p-4 text-xs text-slate-100">
-                {JSON.stringify(paymentRequest ?? buildPlaygroundPaymentRequest(resource), null, 2)}
+                {JSON.stringify(
+                  redactSensitivePaymentData(
+                    paymentRequest ?? buildPlaygroundPaymentRequest(resource)
+                  ),
+                  null,
+                  2
+                )}
               </pre>
             </CardBody>
           </Card>
@@ -357,15 +364,14 @@ function ResultPanel({
 }
 
 function normalizePlaygroundError(error: unknown) {
-  if (error instanceof ApiClientError) {
-    return {
-      code: error.code,
-      message: error.message
-    };
-  }
+  const state = normalizeUiError(error, {
+    code: "REQUEST_FAILED",
+    description: "Payment request failed.",
+    title: "Payment request failed"
+  });
 
   return {
-    code: "REQUEST_FAILED",
-    message: error instanceof Error ? error.message : "Payment request failed."
+    code: state.code,
+    message: state.description
   };
 }

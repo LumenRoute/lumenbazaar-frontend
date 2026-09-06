@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/surfaces";
 import { findDemoSeller } from "@/fixtures/lumenbazaar";
 import type { Resource, ResourceStatus } from "@/services/api/schemas";
 import { formatPaymentAmount, loadSellerResources, shortHash } from "@/services/payments";
+import { emptyStateForCollection } from "@/services/ui-state";
 
 const statusOptions: Array<{ label: string; value: ResourceStatus | "all" }> = [
   { label: "All", value: "all" },
@@ -24,6 +25,7 @@ export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sell
   const [status, setStatus] = useState<ResourceStatus | "all">("all");
   const [disabledIds, setDisabledIds] = useState<Set<string>>(new Set());
   const seller = findDemoSeller(sellerId);
+  const emptyState = emptyStateForCollection("resources");
   const resources = useMemo(
     () =>
       loadSellerResources({
@@ -81,10 +83,7 @@ export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sell
         </Card>
 
         {resources.length === 0 ? (
-          <EmptyState
-            title="No seller resources loaded"
-            description="Publish a resource or broaden the status filter to see draft and inactive listings."
-          />
+          <EmptyState title={emptyState.title} description={emptyState.description} />
         ) : (
           <Card>
             <CardHeader>

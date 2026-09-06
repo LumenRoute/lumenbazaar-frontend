@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { ErrorState, LoadingState } from "@/components/ui/surfaces";
 import { loadResourceDetail } from "@/services/resource-detail";
+import { normalizeUiError } from "@/services/ui-state";
 
 import { ResourceDetailSummary } from "./resource-detail-summary";
 import { PaymentRequirementViewer } from "./payment-requirement-viewer";
@@ -20,11 +21,19 @@ export function ResourceDetailPage({ resourceId }: { resourceId: string }) {
   }
 
   if (data === undefined || error !== null) {
+    const state = normalizeUiError(error, {
+      code: "RESOURCE_UNAVAILABLE",
+      description: "The resource detail could not be loaded from the API or local fixtures.",
+      title: "Resource unavailable"
+    });
+
     return (
       <ErrorState
-        title="Resource unavailable"
-        description="The resource detail could not be loaded from the API or local fixtures."
+        code={state.code}
+        description={state.description}
         onRetry={() => void refetch()}
+        requestId={state.requestId}
+        title={state.title}
       />
     );
   }

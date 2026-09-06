@@ -23,6 +23,7 @@ pnpm dev
 
 ```bash
 pnpm check
+pnpm test:e2e
 ```
 
 ## Environment
@@ -38,8 +39,16 @@ NEXT_PUBLIC_ENABLE_UPTO_SESSIONS=false
 NEXT_PUBLIC_ENABLE_MCP_INSPECTOR=true
 ```
 
+For deployed testnet settings, copy `.env.testnet.example` or mirror those values in Vercel.
+
 Testnet is the default target. Mainnet-compatible flows remain feature-flagged until the backend and
 contract acceptance criteria are met.
+
+## Testnet Release
+
+The Next.js app is configured for Vercel through `vercel.json`. Set
+`NEXT_PUBLIC_LUMENBAZAAR_API_URL` in Vercel to the deployed backend facilitator URL before reviewer
+testing. See `docs/testnet-release.md` for the verification checklist and known limitations.
 
 ## Related Repositories
 

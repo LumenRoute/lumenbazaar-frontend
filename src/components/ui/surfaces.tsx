@@ -29,13 +29,17 @@ export function EmptyState({ title, description }: { title: string; description:
 }
 
 export function ErrorState({
+  code,
   title,
   description,
-  onRetry
+  onRetry,
+  requestId
 }: {
+  code?: string;
   title: string;
   description: string;
   onRetry?: () => void;
+  requestId?: string;
 }) {
   return (
     <Card>
@@ -45,6 +49,20 @@ export function ErrorState({
           <div>
             <h2 className="text-base font-semibold text-slate-950">{title}</h2>
             <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
+            {code || requestId ? (
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                {code ? (
+                  <span className="rounded border border-red-200 bg-red-50 px-2 py-1 font-medium text-red-700">
+                    {code}
+                  </span>
+                ) : null}
+                {requestId ? (
+                  <span className="break-all rounded border border-slate-200 bg-slate-50 px-2 py-1 font-medium text-slate-600">
+                    {requestId}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
         {onRetry ? (
