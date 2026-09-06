@@ -205,6 +205,112 @@ describe("LumenBazaarApiClient", () => {
       paymentAttemptId: "attempt_1"
     });
   });
+
+  it("reads latest conformance from the persisted run list", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json([
+        {
+          completedAt: "2026-09-02T16:05:00.000Z",
+          createdAt: "2026-09-02T16:05:00.000Z",
+          exactResults: 3,
+          failedCount: 0,
+          id: "conformance_run_1",
+          network: "stellar:testnet",
+          passedCount: 3,
+          reservedCount: 3,
+          results: [
+            {
+              description: "Exact support is advertised.",
+              durationMs: 14,
+              endpoint: "/v1/supported",
+              id: "exact-supported",
+              method: "GET",
+              name: "GET /v1/supported returns exact scheme",
+              network: "stellar:testnet",
+              passed: true,
+              scheme: "exact",
+              status: "passed"
+            }
+          ],
+          startedAt: "2026-09-02T16:04:30.000Z",
+          status: "passed",
+          suite: "stellar-x402"
+        }
+      ])
+    );
+    const client = new LumenBazaarApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+
+    const latest = await client.getLatestConformanceRun();
+    const calls = fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>;
+    const url = new URL(String(calls[0]?.[0]));
+
+    expect(url.pathname).toBe("/v1/conformance/runs");
+    expect(url.searchParams.get("limit")).toBe("1");
+    expect(latest.id).toBe("conformance_run_1");
+  });
+
+  it("parses supported exact and upto schemes", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({
+        extensions: {
+          bazaar: true,
+          upto: true,
+          uptoContracts: [
+            {
+              contractId: "CCAPPEDSESSION",
+              network: "stellar:testnet"
+            }
+          ]
+        },
+        schemes: [
+          {
+            assets: [
+              {
+                code: "USDC",
+                decimals: 7,
+                issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
+              }
+            ],
+            extensions: {
+              upto: false,
+              x402Version: "1"
+            },
+            name: "exact",
+            network: "stellar:testnet"
+          },
+          {
+            assets: [
+              {
+                code: "USDC",
+                contractId: "CASSET",
+                decimals: 7,
+                issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
+              }
+            ],
+            extensions: {
+              contractId: "CCAPPEDSESSION",
+              sessionEndpoint: "/v1/payment-sessions",
+              x402Version: "1"
+            },
+            name: "upto",
+            network: "stellar:testnet"
+          }
+        ]
+      })
+    );
+    const client = new LumenBazaarApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+
+    const supported = await client.getSupported();
+
+    expect(supported.schemes.map((scheme) => scheme.name)).toEqual(["exact", "upto"]);
+    expect(supported.extensions.uptoContracts).toHaveLength(1);
+  });
 });
 
 function resourcePayload() {

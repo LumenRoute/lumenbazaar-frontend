@@ -28,6 +28,7 @@ export type PaymentActivity = {
 
 export type PaymentActivityFilters = {
   asset?: string;
+  date?: string;
   network?: NetworkId;
   resourceType?: ResourceType;
   sellerId?: string;
@@ -74,6 +75,7 @@ export function loadPaymentActivity(filters: PaymentActivityFilters = {}): Payme
           status === filters.status ||
           activity.attempt.status === filters.status) &&
         (filters.network === undefined || activity.attempt.network === filters.network) &&
+        (filters.date === undefined || sameUtcDate(activity.attempt.createdAt, filters.date)) &&
         (filters.asset === undefined ||
           activity.attempt.assetCode.toLowerCase() === filters.asset.toLowerCase()) &&
         (filters.resourceType === undefined || activity.resource?.type === filters.resourceType)
@@ -121,4 +123,8 @@ function demoPaymentResources() {
       ])
     ).values()
   ].filter((resource): resource is Resource => resource !== undefined);
+}
+
+function sameUtcDate(value: string, date: string) {
+  return value.slice(0, 10) === date;
 }

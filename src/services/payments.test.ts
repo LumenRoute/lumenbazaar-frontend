@@ -37,6 +37,8 @@ describe("payment activity services", () => {
     expect(loadPaymentActivity({ asset: "USDC", resourceType: "mcp" })[0]?.resource?.type).toBe(
       "mcp"
     );
+    expect(loadPaymentActivity({ date: "2026-09-02" })).toHaveLength(3);
+    expect(loadPaymentActivity({ date: "2026-09-03" })).toHaveLength(0);
   });
 
   it("formats payment amounts and transaction links", () => {

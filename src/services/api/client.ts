@@ -5,6 +5,7 @@ import { loadRuntimeConfig } from "@/config/runtime";
 import {
   apiFailureSchema,
   conformanceRunSchema,
+  conformanceRunsSchema,
   createResourceInputSchema,
   createSellerInputSchema,
   healthSchema,
@@ -183,9 +184,32 @@ export class LumenBazaarApiClient {
     });
   }
 
+  listConformanceRuns(
+    query: {
+      limit?: number;
+      network?: ConformanceRun["network"];
+      status?: ConformanceRun["status"];
+    } = {}
+  ): Promise<ConformanceRun[]> {
+    return this.request("/v1/conformance/runs", {
+      query,
+      schema: conformanceRunsSchema
+    });
+  }
+
   getLatestConformanceRun(): Promise<ConformanceRun> {
-    return this.request("/v1/conformance/latest", {
-      schema: conformanceRunSchema
+    return this.listConformanceRuns({ limit: 1 }).then((runs) => {
+      const latest = runs[0];
+
+      if (latest === undefined) {
+        throw new ApiClientError({
+          code: "RESOURCE_NOT_FOUND",
+          message: "No conformance runs are available.",
+          status: 404
+        });
+      }
+
+      return conformanceRunSchema.parse(latest);
     });
   }
 

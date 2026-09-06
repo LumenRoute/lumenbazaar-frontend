@@ -3,11 +3,13 @@ import {
   receiptSchema,
   resourceSchema,
   sellerSchema,
+  supportedSchema,
   type ConformanceRun,
   type PaymentRequirement,
   type Receipt,
   type Resource,
-  type Seller
+  type Seller,
+  type SupportedPaymentSchemes
 } from "@/services/api/schemas";
 
 export type DemoPaymentAttempt = {
@@ -183,6 +185,31 @@ export const demoPaymentRequirements: PaymentRequirement[] = demoResources.map((
   x402Version: "1"
 }));
 
+export const demoSupportedPaymentSchemes: SupportedPaymentSchemes = supportedSchema.parse({
+  extensions: {
+    bazaar: true,
+    upto: false,
+    uptoContracts: []
+  },
+  schemes: [
+    {
+      assets: [
+        {
+          code: "USDC",
+          decimals: 7,
+          issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
+        }
+      ],
+      extensions: {
+        upto: false,
+        x402Version: "1"
+      },
+      name: "exact",
+      network: "stellar:testnet"
+    }
+  ]
+});
+
 export const demoPaymentAttempts: DemoPaymentAttempt[] = [
   {
     id: "attempt_weather_001",
@@ -276,29 +303,93 @@ export const demoReceipts: Receipt[] = [
 
 export const demoConformanceRun: ConformanceRun = conformanceRunSchema.parse({
   completedAt: "2026-09-02T16:05:00.000Z",
+  createdAt: "2026-09-02T16:05:00.000Z",
+  exactResults: 3,
+  failedCount: 0,
   id: "conformance_local_demo",
+  network: "stellar:testnet",
+  passedCount: 3,
+  reservedCount: 3,
   results: [
     {
-      code: null,
+      description: "Checks that the facilitator advertises exact Stellar x402 support.",
+      durationMs: 18,
       endpoint: "/v1/supported",
-      message: "Exact scheme advertised for stellar:testnet.",
-      ok: true
+      id: "exact-supported",
+      method: "GET",
+      name: "GET /v1/supported returns exact scheme",
+      network: "stellar:testnet",
+      passed: true,
+      scheme: "exact",
+      status: "passed"
     },
     {
-      code: null,
+      description: "Checks that exact payment verification accepts valid Stellar payloads.",
+      durationMs: 31,
       endpoint: "/v1/verify",
-      message: "Verification returns accepted and stable rejection states.",
-      ok: true
+      id: "exact-verify",
+      method: "POST",
+      name: "POST /v1/verify accepts exact payload",
+      network: "stellar:testnet",
+      passed: true,
+      scheme: "exact",
+      status: "passed"
     },
     {
-      code: null,
+      description: "Checks that exact settlement returns receipt and transaction evidence.",
+      durationMs: 92,
       endpoint: "/v1/settle",
-      message: "Settlement returns receipt identifiers and transaction metadata.",
-      ok: true
+      id: "exact-settle",
+      method: "POST",
+      name: "POST /v1/settle settles exact payload",
+      network: "stellar:testnet",
+      passed: true,
+      scheme: "exact",
+      status: "passed"
+    },
+    {
+      description: "Reserved until capped session support is enabled by the backend.",
+      durationMs: 0,
+      endpoint: "/v1/supported",
+      id: "upto-supported",
+      method: "GET",
+      name: "GET /v1/supported advertises upto readiness",
+      network: "stellar:testnet",
+      passed: false,
+      reserved: true,
+      scheme: "upto",
+      status: "reserved"
+    },
+    {
+      description: "Reserved until capped session creation is available.",
+      durationMs: 0,
+      endpoint: "/v1/payment-sessions",
+      id: "upto-session-create",
+      method: "POST",
+      name: "POST /v1/payment-sessions creates upto session",
+      network: "stellar:testnet",
+      passed: false,
+      reserved: true,
+      scheme: "upto",
+      status: "reserved"
+    },
+    {
+      description: "Reserved until capped session settlement is available.",
+      durationMs: 0,
+      endpoint: "/v1/payment-sessions/{sessionId}/settle",
+      id: "upto-settle",
+      method: "POST",
+      name: "POST /v1/payment-sessions/{sessionId}/settle processes upto draw",
+      network: "stellar:testnet",
+      passed: false,
+      reserved: true,
+      scheme: "upto",
+      status: "reserved"
     }
   ],
   startedAt: "2026-09-02T16:04:30.000Z",
-  status: "passed"
+  status: "passed",
+  suite: "stellar-x402"
 });
 
 export const demoDashboardMetrics = {

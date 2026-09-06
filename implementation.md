@@ -376,96 +376,96 @@ Completion check:
 
 - A full testnet payment simulation can be run from the UI. ✓
 
-## Phase 26: Transaction Dashboard
+## Phase 26: Transaction Dashboard (done)
 
 Parts:
 
-- Build `/transactions`.
-- Add filters for network, status, asset, seller, and date.
-- Show payment attempts and settlements.
-- Link transaction hashes to the configured Stellar explorer.
+- Build `/transactions`. (done)
+- Add filters for network, status, asset, seller, and date. (done)
+- Show payment attempts and settlements. (done)
+- Link transaction hashes to the configured Stellar explorer. (done)
 
 Completion check:
 
-- Operators and reviewers can inspect successful and failed payments.
+- Operators and reviewers can inspect successful and failed payments. (done)
 
-## Phase 27: Operator Dashboard
+## Phase 27: Operator Dashboard (done)
 
 Parts:
 
-- Build `/operators`.
-- Show API status, supported networks, and configured assets.
-- Show queue depth and settlement latency.
-- Show RPC and Horizon health.
+- Build `/operators`. (done)
+- Show API status, supported networks, and configured assets. (done)
+- Show queue depth and settlement latency. (done)
+- Show RPC and Horizon health. (done)
 
 Completion check:
 
-- Operator can quickly identify degraded backend dependencies.
+- Operator can quickly identify degraded backend dependencies. (done)
 
-## Phase 28: Operator Health Page
+## Phase 28: Operator Health Page (done)
 
 Parts:
 
-- Build `/operators/health`.
-- Render `OperatorHealthTable`.
-- Add service-level status rows for API, worker, search, Redis, Postgres, RPC, and Horizon.
-- Show last check time and recent failure reason.
+- Build `/operators/health`. (done)
+- Render `OperatorHealthTable`. (done)
+- Add service-level status rows for API, worker, search, Redis, Postgres, RPC, and Horizon. (done)
+- Show last check time and recent failure reason. (done)
 
 Completion check:
 
-- Health checks are readable without exposing secrets.
+- Health checks are readable without exposing secrets. (done)
 
-## Phase 29: Conformance Page
+## Phase 29: Conformance Page (done)
 
 Parts:
 
-- Build `/operators/conformance`.
-- Show latest conformance run.
-- Show `/supported`, `/verify`, and `/settle` pass or fail status.
-- Show exact scheme and future `upto` scheme coverage.
+- Build `/operators/conformance`. (done)
+- Show latest conformance run. (done)
+- Show `/supported`, `/verify`, and `/settle` pass or fail status. (done)
+- Show exact scheme and future `upto` scheme coverage. (done)
 
 Completion check:
 
-- Reviewers can see conformance status without reading CI logs.
+- Reviewers can see conformance status without reading CI logs. (done)
 
-## Phase 30: MCP Tool Inspector
+## Phase 30: MCP Tool Inspector (done)
 
 Parts:
 
-- Build `McpToolInspector`.
-- Show MCP server metadata.
-- Render tool schemas for `search_paid_resources`, `inspect_resource`, and `call_paid_resource`.
-- Show budget controls and deterministic error examples.
+- Build `McpToolInspector`. (done)
+- Show MCP server metadata. (done)
+- Render tool schemas for `search_paid_resources`, `inspect_resource`, and `call_paid_resource`. (done)
+- Show budget controls and deterministic error examples. (done)
 
 Completion check:
 
-- Agent developers can inspect MCP tool contracts from the UI.
+- Agent developers can inspect MCP tool contracts from the UI. (done)
 
-## Phase 31: Settings
+## Phase 31: Settings (done)
 
 Parts:
 
-- Build `/settings`.
-- Add network selection.
-- Add facilitator URL override for local development.
-- Add wallet preferences.
-- Add local demo mode toggle.
+- Build `/settings`. (done)
+- Add network selection. (done)
+- Add facilitator URL override for local development. (done)
+- Add wallet preferences. (done)
+- Add local demo mode toggle. (done)
 
 Completion check:
 
-- Developers can switch between local, testnet, staging, and mainnet-compatible settings.
+- Developers can switch between local, testnet, staging, and mainnet-compatible settings. (done)
 
-## Phase 32: Documentation Links
+## Phase 32: Documentation Links (done)
 
 Parts:
 
-- Build `/docs`.
-- Link to seller, buyer, agent, operator, API, contract, and security docs.
-- Link each page to the canonical docs repo path.
+- Build `/docs`. (done)
+- Link to seller, buyer, agent, operator, API, contract, and security docs. (done)
+- Link each page to the canonical docs repo path. (done)
 
 Completion check:
 
-- Frontend routes never become the canonical documentation source.
+- Frontend routes never become the canonical documentation source. (done)
 
 ## Phase 33: Error And State Hardening
 

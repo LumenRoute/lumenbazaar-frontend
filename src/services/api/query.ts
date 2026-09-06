@@ -17,6 +17,7 @@ export const queryKeys = {
   dashboard: ["dashboard"] as const,
   health: ["health"] as const,
   networks: ["networks"] as const,
+  operators: ["operators"] as const,
   resources: (filters: Record<string, unknown>) => ["resources", filters] as const,
   search: (filters: Record<string, unknown>) => ["search", filters] as const,
   sellers: ["sellers"] as const,

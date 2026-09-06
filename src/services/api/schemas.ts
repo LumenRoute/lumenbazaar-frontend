@@ -75,15 +75,20 @@ export const healthSchema = z.object({
   service: z.string()
 });
 
+export type Health = z.infer<typeof healthSchema>;
+
 export const versionSchema = z.object({
   environment: z.string(),
   service: z.string(),
   version: z.string()
 });
 
+export type Version = z.infer<typeof versionSchema>;
+
 const supportedAssetSchema = z.object({
   code: z.string(),
   decimals: z.number(),
+  contractId: z.string().optional(),
   issuer: z.string()
 });
 
@@ -100,24 +105,33 @@ export const networksSchema = z.object({
   )
 });
 
+export type NetworksResponse = z.infer<typeof networksSchema>;
+
 export const supportedSchema = z.object({
   extensions: z.object({
     bazaar: z.boolean(),
     upto: z.boolean(),
-    uptoContracts: z.array(z.string())
+    uptoContracts: z.array(
+      z.union([
+        z.string(),
+        z.object({
+          contractId: z.string(),
+          network: networkIdSchema
+        })
+      ])
+    )
   }),
   schemes: z.array(
     z.object({
       assets: z.array(supportedAssetSchema),
-      extensions: z.object({
-        upto: z.boolean(),
-        x402Version: z.string()
-      }),
-      name: z.literal("exact"),
+      extensions: z.record(z.string(), z.unknown()),
+      name: z.enum(["exact", "upto"]),
       network: networkIdSchema
     })
   )
 });
+
+export type SupportedPaymentSchemes = z.infer<typeof supportedSchema>;
 
 export const sellerSchema = z.object({
   createdAt: z.string(),
@@ -329,19 +343,37 @@ export const receiptSchema = z.object({
 export type Receipt = z.infer<typeof receiptSchema>;
 
 export const conformanceRunSchema = z.object({
-  completedAt: z.string().nullable(),
+  completedAt: z.string(),
+  createdAt: z.string(),
+  exactResults: z.number().int().nonnegative(),
+  failedCount: z.number().int().nonnegative(),
   id: z.string(),
+  network: networkIdSchema,
+  passedCount: z.number().int().nonnegative(),
+  reservedCount: z.number().int().nonnegative(),
   results: z.array(
     z.object({
-      code: errorCodeSchema.nullable(),
+      description: z.string().optional(),
+      details: jsonObjectSchema.optional(),
+      durationMs: z.number().int().nonnegative(),
       endpoint: z.string(),
-      message: z.string(),
-      ok: z.boolean()
+      error: z.string().optional(),
+      id: z.string(),
+      method: z.enum(["GET", "POST"]),
+      name: z.string(),
+      network: networkIdSchema,
+      passed: z.boolean(),
+      reserved: z.boolean().optional(),
+      scheme: z.enum(["exact", "upto"]),
+      status: z.enum(["passed", "failed", "reserved"])
     })
   ),
   startedAt: z.string(),
-  status: z.enum(["pending", "running", "passed", "failed"])
+  status: z.enum(["passed", "failed"]),
+  suite: z.literal("stellar-x402")
 });
+
+export const conformanceRunsSchema = z.array(conformanceRunSchema);
 
 export type ConformanceRun = z.infer<typeof conformanceRunSchema>;
 
