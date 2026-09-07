@@ -1,12 +1,18 @@
 import { apiClient, type LumenBazaarApiClient } from "@/services/api/client";
 
-import { demoConformanceRun, demoDashboardMetrics, demoResources } from "@/fixtures/lumenbazaar";
-
-export type DashboardMetrics = typeof demoDashboardMetrics;
+export type DashboardMetrics = {
+  activeSellerCount: number | null;
+  apiUptimeSeconds: number | null;
+  indexedResourceCount: number | null;
+  latestConformanceStatus: string;
+  settledPaymentCount: number | null;
+  settlementVolumeByNetwork: Record<string, number>;
+  supportedNetworks: string[];
+};
 
 export type DashboardSnapshot = {
   metrics: DashboardMetrics;
-  source: "api" | "demo";
+  source: "api" | "partial" | "unavailable";
   warnings: string[];
 };
 
@@ -31,27 +37,25 @@ export async function loadDashboardSnapshot(
     networks: networksResult,
     resources: resourcesResult
   });
-  const resources =
-    resourcesResult.status === "fulfilled" ? resourcesResult.value.resources : demoResources;
+  const resources = resourcesResult.status === "fulfilled" ? resourcesResult.value.resources : null;
   const networks =
     networksResult.status === "fulfilled"
       ? networksResult.value.networks.map((network) => network.id)
-      : demoDashboardMetrics.supportedNetworks;
-  const conformance =
-    conformanceResult.status === "fulfilled" ? conformanceResult.value : demoConformanceRun;
+      : [];
+  const conformanceStatus =
+    conformanceResult.status === "fulfilled" ? conformanceResult.value.status : "unavailable";
 
   return {
     metrics: {
-      ...demoDashboardMetrics,
-      apiUptimeSeconds:
-        healthResult.status === "fulfilled"
-          ? demoDashboardMetrics.apiUptimeSeconds
-          : demoDashboardMetrics.apiUptimeSeconds,
-      indexedResourceCount: resources.length,
-      latestConformanceStatus: conformance.status,
+      activeSellerCount: null,
+      apiUptimeSeconds: null,
+      indexedResourceCount: resources?.length ?? null,
+      latestConformanceStatus: conformanceStatus,
+      settledPaymentCount: null,
+      settlementVolumeByNetwork: {},
       supportedNetworks: networks
     },
-    source: warnings.length === 4 ? "demo" : "api",
+    source: warnings.length === 0 ? "api" : warnings.length === 4 ? "unavailable" : "partial",
     warnings
   };
 }

@@ -60,12 +60,24 @@ export function DashboardMetrics() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={snapshot.source === "api" ? "success" : "warning"}>
-          {snapshot.source === "api" ? "API data" : "Local demo data"}
+        <Badge
+          tone={
+            snapshot.source === "api"
+              ? "success"
+              : snapshot.source === "partial"
+                ? "warning"
+                : "danger"
+          }
+        >
+          {snapshot.source === "api"
+            ? "Live API data"
+            : snapshot.source === "partial"
+              ? "Partial API data"
+              : "API unavailable"}
         </Badge>
         {snapshot.warnings.map((warning) => (
           <Badge key={warning} tone="neutral">
-            {warning} fallback
+            {warning} unavailable
           </Badge>
         ))}
       </div>
@@ -83,7 +95,11 @@ export function DashboardMetrics() {
               </CardHeader>
               <CardBody>
                 <p className="text-3xl font-semibold text-slate-950">
-                  {metric.transform ? metric.transform(Number(value)) : value}
+                  {value === null
+                    ? "Unavailable"
+                    : metric.transform
+                      ? metric.transform(value)
+                      : value}
                 </p>
               </CardBody>
             </Card>
@@ -111,6 +127,9 @@ export function DashboardMetrics() {
                 </div>
               </div>
             ))}
+            {Object.keys(snapshot.metrics.settlementVolumeByNetwork).length === 0 ? (
+              <p className="text-sm text-slate-600">Unavailable from the current API.</p>
+            ) : null}
           </CardBody>
         </Card>
 
@@ -128,6 +147,9 @@ export function DashboardMetrics() {
                     {network}
                   </Badge>
                 ))}
+                {snapshot.metrics.supportedNetworks.length === 0 ? (
+                  <span className="text-sm text-slate-600">Unavailable</span>
+                ) : null}
               </div>
             </div>
             <div>

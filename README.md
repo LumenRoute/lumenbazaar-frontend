@@ -52,6 +52,6 @@ testing. See `docs/testnet-release.md` for the verification checklist and known 
 
 ## Related Repositories
 
-- `lumenbazaar-backend`
-- `lumenbazaar-contracts`
-- `lumenbazaar-docs`
+- [Backend](https://github.com/LumenRoute/lumenbazaar-backend)
+- [Contracts](https://github.com/LumenRoute/lumenbazaar-contracts)
+- [Documentation](https://github.com/LumenRoute/lumenbazaar-docs)

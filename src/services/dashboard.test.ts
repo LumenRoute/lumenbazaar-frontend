@@ -5,7 +5,7 @@ import { demoConformanceRun } from "@/fixtures/lumenbazaar";
 import { formatDuration, loadDashboardSnapshot } from "./dashboard";
 
 describe("dashboard snapshot", () => {
-  it("uses available API data while retaining demo-only metrics", async () => {
+  it("uses available API data without inventing unsupported metrics", async () => {
     const snapshot = await loadDashboardSnapshot({
       async getHealth() {
         return {
@@ -48,10 +48,13 @@ describe("dashboard snapshot", () => {
 
     expect(snapshot.source).toBe("api");
     expect(snapshot.metrics.indexedResourceCount).toBe(0);
+    expect(snapshot.metrics.activeSellerCount).toBeNull();
+    expect(snapshot.metrics.settledPaymentCount).toBeNull();
+    expect(snapshot.metrics.apiUptimeSeconds).toBeNull();
     expect(snapshot.metrics.supportedNetworks).toEqual(["stellar:testnet"]);
   });
 
-  it("falls back to demo data when API calls fail", async () => {
+  it("returns an honest unavailable state when API calls fail", async () => {
     const failingClient = {
       getHealth: async () => Promise.reject(new Error("offline")),
       getLatestConformanceRun: async () => Promise.reject(new Error("offline")),
@@ -61,8 +64,10 @@ describe("dashboard snapshot", () => {
 
     const snapshot = await loadDashboardSnapshot(failingClient);
 
-    expect(snapshot.source).toBe("demo");
-    expect(snapshot.metrics.indexedResourceCount).toBeGreaterThan(0);
+    expect(snapshot.source).toBe("unavailable");
+    expect(snapshot.metrics.indexedResourceCount).toBeNull();
+    expect(snapshot.metrics.supportedNetworks).toEqual([]);
+    expect(snapshot.metrics.latestConformanceStatus).toBe("unavailable");
     expect(snapshot.warnings.toSorted()).toEqual(
       ["resources", "health", "networks", "conformance"].toSorted()
     );
