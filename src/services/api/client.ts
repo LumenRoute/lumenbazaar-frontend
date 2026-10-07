@@ -106,7 +106,7 @@ export class LumenBazaarApiClient {
 
     this.baseUrl = options.baseUrl ?? config.apiBaseUrl;
     this.expectedNetwork = options.expectedNetwork ?? config.defaultNetwork;
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
     this.mode = options.mode ?? config.environment;
     this.validateCompatibility = options.validateCompatibility ?? true;
   }

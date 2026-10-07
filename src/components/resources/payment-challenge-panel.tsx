@@ -47,16 +47,11 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
 
   useEffect(() => {
     if (source !== "api") return;
-    let active = true;
     void paidFlowCoordinator.recover({ resourceId: resource.id }).then((recovered) => {
-      if (active && recovered !== undefined) {
-        setOutcome(recovered);
-        setFlowState(recovered.state);
-      }
+      if (recovered === undefined) return;
+      setOutcome(recovered);
+      setFlowState(recovered.state);
     });
-    return () => {
-      active = false;
-    };
   }, [resource.id, source]);
 
   async function requestTerms() {
@@ -219,14 +214,14 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
                 </Button>
               )}
             </div>
-            {flowState !== undefined ? (
-              <div aria-live="polite" className="border-t border-slate-200 pt-4">
-                <Badge tone={flowTone(flowState)}>{paidFlowStateLabels[flowState]}</Badge>
-              </div>
-            ) : null}
-            {outcome !== undefined ? <PaymentOutcome outcome={outcome} /> : null}
           </div>
         )}
+        {flowState !== undefined ? (
+          <div aria-live="polite" className="mt-4 border-t border-slate-200 pt-4">
+            <Badge tone={flowTone(flowState)}>{paidFlowStateLabels[flowState]}</Badge>
+          </div>
+        ) : null}
+        {outcome !== undefined ? <PaymentOutcome outcome={outcome} /> : null}
       </CardBody>
     </Card>
   );
