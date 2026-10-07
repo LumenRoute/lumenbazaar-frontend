@@ -30,6 +30,9 @@ importers:
       '@x402/core':
         specifier: 2.28.0
         version: 2.28.0
+      '@x402/stellar':
+        specifier: 2.28.0
+        version: 2.28.0
       clsx:
         specifier: 2.1.1
         version: 2.1.1
@@ -1883,6 +1886,10 @@ packages:
 
   '@x402/core@2.28.0':
     resolution: {integrity: sha512-Da/7zKxCKqpBoB4Msc9tFgkAv7tJTD8nG+DSSm+QdXAyJS4PQsmgVSKe17rDJTtlu0pwNbLcOje6MyQ6kaDkig==}
+
+  '@x402/stellar@2.28.0':
+    resolution: {integrity: sha512-H/P46YVVEvJmnXlss8fJBNGgjaLkp3pWJ6PH2uOJY+jVemugUoQPArwtQKNovEV2BnF0gnJ+sdaRg+4Gucu6jQ==}
+    engines: {node: '>=22.0.0'}
 
   abitype@1.0.6:
     resolution: {integrity: sha512-MMSqYh4+C/aVqI2RQaWqbvI4Kxo5cQV40WQ4QFtDnNzCkqChm8MuENhElmynZlO0qUy/ObkEUaXtKqYnx1Kp3A==}
@@ -7108,6 +7115,14 @@ snapshots:
   '@x402/core@2.28.0':
     dependencies:
       zod: 3.25.76
+
+  '@x402/stellar@2.28.0':
+    dependencies:
+      '@stellar/stellar-sdk': 17.2.1
+      '@x402/core': 2.28.0
+    transitivePeerDependencies:
+      - debug
+      - supports-color
 
   abitype@1.0.6(typescript@5.9.3)(zod@3.25.76):
     optionalDependencies:

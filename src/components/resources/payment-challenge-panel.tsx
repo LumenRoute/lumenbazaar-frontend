@@ -1,6 +1,6 @@
 "use client";
 
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, WalletCards } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,11 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { loadRuntimeConfig } from "@/config/runtime";
 import { apiClient } from "@/services/api/client";
 import type { Resource } from "@/services/api/schemas";
+import {
+  AuthorizationError,
+  authorizePaymentChallenge,
+  type SignedPaymentAuthorization
+} from "@/services/x402/authorization";
 import {
   ChallengeError,
   expectedTermsForResource,
@@ -23,12 +28,15 @@ type PaymentChallengePanelProps = {
 
 export function PaymentChallengePanel({ resource, source }: PaymentChallengePanelProps) {
   const [challenge, setChallenge] = useState<ValidatedPaymentChallenge>();
+  const [authorization, setAuthorization] = useState<SignedPaymentAuthorization>();
   const [error, setError] = useState<string>();
   const [isLoading, setIsLoading] = useState(false);
+  const [isSigning, setIsSigning] = useState(false);
   const fingerprint = useRef<string | undefined>(undefined);
 
   async function requestTerms() {
     setError(undefined);
+    setAuthorization(undefined);
     setIsLoading(true);
     try {
       const supported = await apiClient.getSupported();
@@ -57,6 +65,24 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
       );
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function authorize() {
+    if (challenge === undefined) return;
+    setError(undefined);
+    setAuthorization(undefined);
+    setIsSigning(true);
+    try {
+      setAuthorization(await authorizePaymentChallenge(challenge));
+    } catch (caught) {
+      setError(
+        caught instanceof AuthorizationError
+          ? `${caught.code}: ${caught.message}`
+          : "AUTHORIZATION_FAILED: The wallet authorization could not be created."
+      );
+    } finally {
+      setIsSigning(false);
     }
   }
 
@@ -111,6 +137,26 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
                 value={`${challenge.requirement.maxTimeoutSeconds} seconds`}
               />
             </dl>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+              {authorization === undefined ? (
+                <span className="text-sm text-slate-600">
+                  Authorize with a Freighter payer account.
+                </span>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone="success">Payment authorization ready</Badge>
+                  <span className="break-all text-xs text-slate-500">{authorization.account}</span>
+                </div>
+              )}
+              <Button
+                disabled={isSigning || authorization !== undefined}
+                onClick={() => void authorize()}
+                type="button"
+              >
+                <WalletCards aria-hidden="true" className="h-4 w-4" />
+                {isSigning ? "Authorizing" : "Authorize payment"}
+              </Button>
+            </div>
           </div>
         )}
       </CardBody>
