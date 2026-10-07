@@ -14,6 +14,8 @@ test("explore and resource detail flows render", async ({ page }) => {
 
   await expect(page.getByRole("heading", { name: "Resource detail" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Payment terms" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Endpoint payment challenge" })).toBeVisible();
+  await expect(page.getByText("Unavailable in demo mode")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Schemas" })).toBeVisible();
 });
 

@@ -282,7 +282,10 @@ export type SearchResult = z.infer<typeof searchResultSchema>;
 export const exactPaymentRequirementsSchema = z.object({
   amount: z.string().regex(/^[1-9]\d*$/),
   asset: z.string().min(1),
-  extra: z.record(z.string(), z.unknown()),
+  extra: z
+    .record(z.string(), z.unknown())
+    .nullish()
+    .transform((value) => value ?? {}),
   maxTimeoutSeconds: z.number().int().positive(),
   network: networkIdSchema,
   payTo: z.string(),
@@ -293,12 +296,17 @@ export type ExactPaymentRequirements = z.infer<typeof exactPaymentRequirementsSc
 
 export const paymentResourceSchema = z.object({
   description: z.string().optional(),
+  iconUrl: z.string().url().optional(),
   mimeType: z.string().optional(),
+  serviceName: z.string().optional(),
+  tags: z.array(z.string()).optional(),
   url: z.string().url()
 });
 
 export const paymentRequiredV2Schema = z.object({
   accepts: z.array(exactPaymentRequirementsSchema).min(1),
+  error: z.string().optional(),
+  extensions: z.record(z.string(), z.unknown()).nullish(),
   resource: paymentResourceSchema,
   x402Version: z.literal(2)
 });
