@@ -12,7 +12,6 @@ describe("frontend settings", () => {
     const storage = memoryStorage();
 
     expect(loadFrontendSettings(storage)).toMatchObject({
-      localDemoMode: true,
       network: "stellar:testnet",
       walletPreference: "freighter"
     });
@@ -23,7 +22,6 @@ describe("frontend settings", () => {
     const saved = saveFrontendSettings(
       {
         facilitatorUrl: "http://localhost:8080/",
-        localDemoMode: false,
         network: "stellar:testnet",
         walletPreference: "manual"
       },

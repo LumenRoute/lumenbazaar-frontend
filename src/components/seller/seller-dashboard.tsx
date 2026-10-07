@@ -4,12 +4,32 @@ import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { ErrorState } from "@/components/ui/surfaces";
+import { isDemoMode, loadRuntimeConfig } from "@/config/runtime";
 import { loadSellerDashboard } from "@/services/seller-dashboard";
 
 import { SellerDomainVerifier } from "./seller-domain-verifier";
 
 export function SellerDashboard() {
-  const snapshot = loadSellerDashboard();
+  const mode = loadRuntimeConfig().environment;
+
+  if (!isDemoMode(mode)) {
+    return (
+      <>
+        <PageHeader
+          description="Track wallet identity, domain verification, resource inventory, and recent payment activity."
+          title="Seller dashboard"
+        />
+        <ErrorState
+          code="BACKEND_UNAVAILABLE"
+          description="Seller account APIs are not available in this backend contract. Use explicit demo mode only for fixture-backed seller screens."
+          title="Seller data unavailable"
+        />
+      </>
+    );
+  }
+
+  const snapshot = loadSellerDashboard(undefined, mode);
   const readyToPublish =
     snapshot.identityStatus === "connected" && snapshot.verificationStatus === "verified";
 

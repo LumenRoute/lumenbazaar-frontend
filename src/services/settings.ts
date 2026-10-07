@@ -9,7 +9,6 @@ const walletPreferenceSchema = z.enum(["freighter", "manual", "none"]);
 
 export const frontendSettingsSchema = z.object({
   facilitatorUrl: z.string().url(),
-  localDemoMode: z.boolean(),
   network: networkIdSchema,
   walletPreference: walletPreferenceSchema
 });
@@ -24,7 +23,6 @@ export function defaultFrontendSettings(): FrontendSettings {
 
   return {
     facilitatorUrl: config.apiBaseUrl,
-    localDemoMode: config.environment === "local",
     network: config.defaultNetwork,
     walletPreference: "freighter"
   };

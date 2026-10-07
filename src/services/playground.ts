@@ -3,6 +3,7 @@ import type {
   JsonValue,
   PaymentPayload,
   PaymentVerification,
+  PaymentRequiredV2,
   Resource,
   Settlement
 } from "@/services/api/schemas";
@@ -10,6 +11,7 @@ import type {
 export type PlaygroundAuthorizationMode = "simulation" | "wallet";
 
 export type PaymentRequiredPreview = {
+  body: PaymentRequiredV2;
   headers: Record<string, string>;
   statusCode: 402;
 };
@@ -35,65 +37,40 @@ export function buildPlaygroundPaymentRequest(
   } = {}
 ): PaymentPayload {
   const paymentHash = options.paymentHash ?? createPaymentHash(resource.id);
-  const authorization =
-    options.authorizationMode === "wallet"
-      ? {
-          method: "freighter",
-          status: "pending-wallet-signature"
-        }
-      : {
-          method: "simulation",
-          status: "accepted"
-        };
+  const paymentRequirements = paymentRequirementsForResource(resource, paymentHash);
 
   return {
-    currentLedger: options.currentLedger ?? 1,
     paymentPayload: {
-      amount: resource.amount,
-      asset: {
-        code: resource.assetCode,
-        issuer: resource.assetIssuer
+      accepted: paymentRequirements,
+      payload: {
+        transaction: options.authorizationMode === "wallet" ? "wallet-draft" : "simulation"
       },
-      authorization,
-      expiresAtLedger: 1_000_000_000,
-      network: resource.network,
-      payTo: resource.payTo,
-      paymentHash,
-      scheme: "exact"
-    },
-    paymentRequirements: {
-      amount: resource.amount,
-      asset: {
-        code: resource.assetCode,
-        issuer: resource.assetIssuer
+      resource: {
+        description: resource.description,
+        url: resource.url
       },
-      network: resource.network,
-      payTo: resource.payTo,
-      scheme: "exact"
+      x402Version: 2
     },
-    resourceId: resource.id,
-    sellerId: resource.sellerId
+    paymentRequirements,
+    x402Version: 2
   };
 }
 
 export function buildPaymentRequiredPreview(resource: Resource): PaymentRequiredPreview {
-  const requirement = {
-    amount: resource.amount,
-    asset: {
-      code: resource.assetCode,
-      issuer: resource.assetIssuer
+  const body: PaymentRequiredV2 = {
+    accepts: [paymentRequirementsForResource(resource, "challenge-preview")],
+    resource: {
+      description: resource.description,
+      url: resource.url
     },
-    network: resource.network,
-    payTo: resource.payTo,
-    resourceId: resource.id,
-    scheme: "exact",
-    x402Version: "1"
+    x402Version: 2
   };
 
   return {
+    body,
     headers: {
       "content-type": "application/json",
-      "x-payment-required": JSON.stringify(requirement)
+      "PAYMENT-REQUIRED": JSON.stringify(body)
     },
     statusCode: 402
   };
@@ -101,11 +78,19 @@ export function buildPaymentRequiredPreview(resource: Resource): PaymentRequired
 
 export function simulateVerification(request: PaymentPayload): PaymentVerification {
   return {
-    adapter: "@x402/stellar",
-    network: request.paymentPayload.network,
-    paymentAttemptId: `attempt_playground_${request.resourceId ?? "resource"}`,
-    paymentHash: request.paymentPayload.paymentHash ?? createPaymentHash("playground"),
-    status: "verified"
+    extra: {
+      lumenbazaar: {
+        adapter: "@x402/stellar",
+        correlationId: "corr_playground_simulation",
+        network: request.paymentRequirements.network,
+        paymentAttemptId: `attempt_playground_${String(request.paymentRequirements.extra.resourceId ?? "resource")}`,
+        paymentHash: String(
+          request.paymentRequirements.extra.paymentHash ?? createPaymentHash("playground")
+        ),
+        status: "verified"
+      }
+    },
+    isValid: true
   };
 }
 
@@ -113,15 +98,52 @@ export function simulateSettlement(
   request: PaymentPayload,
   verification: PaymentVerification
 ): Settlement {
+  const verificationEvidence = verification.extra?.lumenbazaar;
+  const paymentAttemptId = verificationEvidence?.paymentAttemptId ?? "attempt_unknown";
+  const transactionHash = "d8f22ec3e5f24f1ba6ef0d42370c8c3fb7fd7d845f9df04379524665b86a16e4";
+
   return {
-    ledger: 113_300,
-    network: request.paymentPayload.network,
-    paymentAttemptId: verification.paymentAttemptId,
-    receiptId: `receipt_${verification.paymentAttemptId}`,
-    settlementId: `settlement_${verification.paymentAttemptId}`,
-    status: "settled",
-    transactionHash: "d8f22ec3e5f24f1ba6ef0d42370c8c3fb7fd7d845f9df04379524665b86a16e4"
+    amount: request.paymentRequirements.amount,
+    extra: {
+      lumenbazaar: {
+        correlationId: verificationEvidence?.correlationId ?? "corr_playground_simulation",
+        ledger: 113_300,
+        paymentAttemptId,
+        receiptId: `receipt_${paymentAttemptId}`,
+        settlementId: `settlement_${paymentAttemptId}`,
+        status: "confirmed",
+        transactionHash
+      }
+    },
+    network: request.paymentRequirements.network,
+    success: true,
+    transaction: transactionHash
   };
+}
+
+function paymentRequirementsForResource(resource: Resource, paymentHash: string) {
+  const configuredContract = resource.extensions.assetContractId;
+
+  return {
+    amount: toAtomicAmount(resource.amount, 7),
+    asset: typeof configuredContract === "string" ? configuredContract : "CDEMOASSETCONTRACT",
+    extra: {
+      assetCode: resource.assetCode,
+      assetIssuer: resource.assetIssuer,
+      paymentHash,
+      resourceId: resource.id
+    },
+    maxTimeoutSeconds: 300,
+    network: resource.network,
+    payTo: resource.payTo,
+    scheme: "exact" as const
+  };
+}
+
+function toAtomicAmount(amount: string, decimals: number) {
+  const [whole = "0", fraction = ""] = amount.split(".");
+  const atomic = `${whole}${fraction.padEnd(decimals, "0").slice(0, decimals)}`.replace(/^0+/, "");
+  return atomic.length === 0 ? "1" : atomic;
 }
 
 function sampleValue(value: JsonValue): JsonValue {

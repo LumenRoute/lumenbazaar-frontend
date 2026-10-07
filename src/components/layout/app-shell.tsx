@@ -48,8 +48,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
-                {network.label}
+                <span
+                  className={`h-2 w-2 rounded-full ${config.environment === "demo" ? "bg-amber-500" : "bg-emerald-500"}`}
+                  aria-hidden="true"
+                />
+                {config.environment === "demo"
+                  ? "Demo data"
+                  : `${config.environment} / ${network.label}`}
               </div>
               <WalletStatus />
             </div>

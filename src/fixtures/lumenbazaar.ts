@@ -5,9 +5,9 @@ import {
   sellerSchema,
   supportedSchema,
   type ConformanceRun,
-  type PaymentRequirement,
   type Receipt,
   type Resource,
+  type ResourcePaymentSummary,
   type Seller,
   type SupportedPaymentSchemes
 } from "@/services/api/schemas";
@@ -172,42 +172,39 @@ export const demoResources: Resource[] = [
   })
 ];
 
-export const demoPaymentRequirements: PaymentRequirement[] = demoResources.map((resource) => ({
+export const demoPaymentRequirements: ResourcePaymentSummary[] = demoResources.map((resource) => ({
   amount: resource.amount,
   assetCode: resource.assetCode,
   assetIssuer: resource.assetIssuer,
-  expiresAtLedger: null,
   extensions: resource.extensions,
   network: resource.network,
   payTo: resource.payTo,
-  resourceId: resource.id,
-  scheme: "exact" as const,
-  x402Version: "1"
+  resourceId: resource.id
 }));
 
 export const demoSupportedPaymentSchemes: SupportedPaymentSchemes = supportedSchema.parse({
-  extensions: {
-    bazaar: true,
-    upto: false,
-    uptoContracts: []
-  },
-  schemes: [
+  extensions: ["bazaar"],
+  kinds: [
     {
-      assets: [
-        {
-          code: "USDC",
-          decimals: 7,
-          issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
-        }
-      ],
-      extensions: {
-        upto: false,
-        x402Version: "1"
+      extra: {
+        areFeesSponsored: true,
+        assets: [
+          {
+            code: "USDC",
+            contractId: "CASSETDEMO",
+            decimals: 7,
+            issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
+          }
+        ]
       },
-      name: "exact",
-      network: "stellar:testnet"
+      network: "stellar:testnet",
+      scheme: "exact",
+      x402Version: 2
     }
-  ]
+  ],
+  signers: {
+    "stellar:*": ["GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"]
+  }
 });
 
 export const demoPaymentAttempts: DemoPaymentAttempt[] = [
@@ -285,7 +282,9 @@ export const demoReceipts: Receipt[] = [
     amount: "0.0500000",
     assetCode: "USDC",
     assetIssuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+    correlationId: "corr_demo_weather_001",
     createdAt: "2026-09-02T16:00:00.000Z",
+    evidenceHash: "8f1f79be0e3dcf4f62adf0b7558e36457a6682620dd9b178f01e8012c6e65b42",
     failureCode: null,
     failureReason: null,
     id: "receipt_weather_001",
@@ -433,7 +432,7 @@ export const demoHealthRows = [
     name: "Search",
     status: "degraded" as const,
     checkedAt: "2026-09-02T16:05:50.000Z",
-    detail: "Fixture search is active until testnet API is reachable."
+    detail: "Explicit demo-mode fixture search is active."
   },
   {
     name: "Redis",

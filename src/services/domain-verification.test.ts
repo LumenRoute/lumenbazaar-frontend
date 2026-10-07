@@ -7,11 +7,16 @@ import {
 } from "./domain-verification";
 
 describe("domain verification service", () => {
-  it("creates a local challenge when the API is unavailable", async () => {
-    const challenge = await requestDomainChallenge("seller_vector_rag", "dns", {
-      requestDomainChallenge: async () => Promise.reject(new Error("offline")),
-      submitDomainVerification: async () => Promise.reject(new Error("offline"))
-    });
+  it("creates a local challenge only in explicit demo mode", async () => {
+    const challenge = await requestDomainChallenge(
+      "seller_vector_rag",
+      "dns",
+      {
+        requestDomainChallenge: async () => Promise.reject(new Error("offline")),
+        submitDomainVerification: async () => Promise.reject(new Error("offline"))
+      },
+      "demo"
+    );
 
     expect(challenge.method).toBe("dns");
     expect(challenge.challenge).toContain("lumenbazaar-domain-verification=");
@@ -25,7 +30,8 @@ describe("domain verification service", () => {
       {
         requestDomainChallenge: async () => Promise.reject(new Error("offline")),
         submitDomainVerification: async () => Promise.reject(new Error("offline"))
-      }
+      },
+      "demo"
     );
 
     expect(result.verified).toBe(true);
@@ -40,11 +46,26 @@ describe("domain verification service", () => {
       {
         requestDomainChallenge: async () => Promise.reject(new Error("offline")),
         submitDomainVerification: async () => Promise.reject(new Error("offline"))
-      }
+      },
+      "demo"
     );
 
     expect(failureForVerification(result)).toMatchObject({
       code: "SELLER_DOMAIN_UNVERIFIED"
     });
+  });
+
+  it("propagates backend unavailability outside demo mode", async () => {
+    await expect(
+      requestDomainChallenge(
+        "seller_vector_rag",
+        "dns",
+        {
+          requestDomainChallenge: async () => Promise.reject(new Error("offline")),
+          submitDomainVerification: async () => Promise.reject(new Error("offline"))
+        },
+        "local"
+      )
+    ).rejects.toThrow("offline");
   });
 });

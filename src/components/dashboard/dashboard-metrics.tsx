@@ -64,16 +64,20 @@ export function DashboardMetrics() {
           tone={
             snapshot.source === "api"
               ? "success"
-              : snapshot.source === "partial"
+              : snapshot.source === "demo"
                 ? "warning"
-                : "danger"
+                : snapshot.source === "partial"
+                  ? "warning"
+                  : "danger"
           }
         >
           {snapshot.source === "api"
             ? "Live API data"
-            : snapshot.source === "partial"
-              ? "Partial API data"
-              : "API unavailable"}
+            : snapshot.source === "demo"
+              ? "Explicit demo data"
+              : snapshot.source === "partial"
+                ? "Partial API data"
+                : "API unavailable"}
         </Badge>
         {snapshot.warnings.map((warning) => (
           <Badge key={warning} tone="neutral">

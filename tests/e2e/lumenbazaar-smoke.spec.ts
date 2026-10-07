@@ -29,7 +29,7 @@ test("seller onboarding and playground flows render", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Payment playground" })).toBeVisible();
   await expect(page.getByLabel("Paid resource")).toBeVisible();
   await page.getByRole("button", { name: "402" }).click();
-  await expect(page.getByText("x-payment-required")).toBeVisible();
+  await expect(page.getByText("PAYMENT-REQUIRED")).toBeVisible();
 });
 
 test("transactions and operator evidence flows render", async ({ page }) => {

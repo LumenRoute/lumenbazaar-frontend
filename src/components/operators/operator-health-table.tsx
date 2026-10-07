@@ -7,13 +7,15 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { LoadingState } from "@/components/ui/surfaces";
+import { ErrorState, LoadingState } from "@/components/ui/surfaces";
 import { queryKeys } from "@/services/api/query";
 import { loadOperatorSnapshot, statusTone, type OperatorHealthRow } from "@/services/operators";
+import { normalizeUiError } from "@/services/ui-state";
 
 export function OperatorHealthPage() {
   const {
     data: snapshot,
+    error,
     isLoading,
     refetch
   } = useQuery({
@@ -21,8 +23,17 @@ export function OperatorHealthPage() {
     queryKey: queryKeys.health
   });
 
-  if (isLoading || snapshot === undefined) {
+  if (isLoading) {
     return <LoadingState label="Loading dependency health" />;
+  }
+
+  if (snapshot === undefined) {
+    const state = normalizeUiError(error, {
+      code: "BACKEND_UNAVAILABLE",
+      description: "Dependency readiness could not be verified against the configured backend.",
+      title: "Dependency health unavailable"
+    });
+    return <ErrorState {...state} onRetry={() => void refetch()} />;
   }
 
   return (
@@ -45,7 +56,7 @@ export function OperatorHealthPage() {
           </Badge>
           {snapshot.warnings.map((warning) => (
             <Badge key={warning} tone="neutral">
-              {warning} fallback
+              {warning} unavailable
             </Badge>
           ))}
         </div>

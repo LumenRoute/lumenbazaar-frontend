@@ -1,4 +1,7 @@
 import { apiClient, type LumenBazaarApiClient } from "@/services/api/client";
+import { isDemoMode, type RuntimeEnvironment } from "@/config/runtime";
+import { demoDashboardMetrics } from "@/fixtures/lumenbazaar";
+import { currentRuntimeMode } from "@/services/runtime-mode";
 
 export type DashboardMetrics = {
   activeSellerCount: number | null;
@@ -12,7 +15,7 @@ export type DashboardMetrics = {
 
 export type DashboardSnapshot = {
   metrics: DashboardMetrics;
-  source: "api" | "partial" | "unavailable";
+  source: "api" | "demo" | "partial" | "unavailable";
   warnings: string[];
 };
 
@@ -22,8 +25,17 @@ type DashboardClient = Pick<
 >;
 
 export async function loadDashboardSnapshot(
-  client: DashboardClient = apiClient
+  client: DashboardClient = apiClient,
+  mode: RuntimeEnvironment = currentRuntimeMode()
 ): Promise<DashboardSnapshot> {
+  if (isDemoMode(mode)) {
+    return {
+      metrics: demoDashboardMetrics,
+      source: "demo",
+      warnings: []
+    };
+  }
+
   const [resourcesResult, healthResult, networksResult, conformanceResult] =
     await Promise.allSettled([
       client.listResources({ limit: 100 }),

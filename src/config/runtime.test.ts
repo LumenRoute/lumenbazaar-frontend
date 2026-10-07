@@ -12,6 +12,15 @@ describe("runtime configuration", () => {
     expect(config.features.enableMainnet).toBe(false);
   });
 
+  it("requires demo mode to be selected explicitly", () => {
+    expect(loadRuntimeConfig({}).environment).toBe("local");
+    expect(
+      loadRuntimeConfig({
+        NEXT_PUBLIC_LUMENBAZAAR_ENV: "demo"
+      }).environment
+    ).toBe("demo");
+  });
+
   it("rejects malformed facilitator URLs", () => {
     expect(() =>
       loadRuntimeConfig({

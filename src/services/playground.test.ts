@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { demoResources } from "@/fixtures/lumenbazaar";
+import { paymentFlowStateLabels } from "@/services/api/schemas";
 
 import {
   buildPaymentRequiredPreview,
@@ -11,6 +12,10 @@ import {
 } from "./playground";
 
 describe("payment playground helpers", () => {
+  it("keeps every payment lifecycle label distinct", () => {
+    expect(new Set(Object.values(paymentFlowStateLabels)).size).toBe(5);
+  });
+
   it("generates sample requests from JSON schema properties", () => {
     expect(
       buildSampleRequest({
@@ -44,21 +49,24 @@ describe("payment playground helpers", () => {
     });
 
     expect(request).toMatchObject({
-      currentLedger: 1,
       paymentPayload: {
-        amount: resource.amount,
-        authorization: {
-          method: "simulation"
+        accepted: {
+          extra: {
+            paymentHash: "payhash_test",
+            resourceId: resource.id
+          },
+          scheme: "exact"
         },
-        paymentHash: "payhash_test",
-        scheme: "exact"
+        payload: {
+          transaction: "simulation"
+        },
+        x402Version: 2
       },
       paymentRequirements: {
-        amount: resource.amount,
+        amount: "500000",
         scheme: "exact"
       },
-      resourceId: resource.id,
-      sellerId: resource.sellerId
+      x402Version: 2
     });
   });
 
@@ -66,9 +74,13 @@ describe("payment playground helpers", () => {
     const preview = buildPaymentRequiredPreview(demoResources[0]!);
 
     expect(preview.statusCode).toBe(402);
-    expect(JSON.parse(preview.headers["x-payment-required"] ?? "{}")).toMatchObject({
-      scheme: "exact",
-      resourceId: "resource_weather_lagos"
+    expect(JSON.parse(preview.headers["PAYMENT-REQUIRED"] ?? "{}")).toMatchObject({
+      accepts: [
+        {
+          scheme: "exact"
+        }
+      ],
+      x402Version: 2
     });
   });
 
@@ -80,12 +92,22 @@ describe("payment playground helpers", () => {
     const settlement = simulateSettlement(request, verification);
 
     expect(verification).toMatchObject({
-      paymentHash: "hash_demo",
-      status: "verified"
+      extra: {
+        lumenbazaar: {
+          paymentHash: "hash_demo",
+          status: "verified"
+        }
+      },
+      isValid: true
     });
     expect(settlement).toMatchObject({
-      paymentAttemptId: verification.paymentAttemptId,
-      status: "settled"
+      extra: {
+        lumenbazaar: {
+          paymentAttemptId: verification.extra?.lumenbazaar.paymentAttemptId,
+          status: "confirmed"
+        }
+      },
+      success: true
     });
   });
 });

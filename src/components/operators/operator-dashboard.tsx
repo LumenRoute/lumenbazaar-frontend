@@ -16,13 +16,15 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { LoadingState } from "@/components/ui/surfaces";
+import { ErrorState, LoadingState } from "@/components/ui/surfaces";
 import { queryKeys } from "@/services/api/query";
 import { loadOperatorSnapshot, statusTone } from "@/services/operators";
+import { normalizeUiError } from "@/services/ui-state";
 
 export function OperatorDashboard() {
   const {
     data: snapshot,
+    error,
     isLoading,
     refetch
   } = useQuery({
@@ -30,8 +32,17 @@ export function OperatorDashboard() {
     queryKey: queryKeys.operators
   });
 
-  if (isLoading || snapshot === undefined) {
+  if (isLoading) {
     return <LoadingState label="Loading operator status" />;
+  }
+
+  if (snapshot === undefined) {
+    const state = normalizeUiError(error, {
+      code: "BACKEND_UNAVAILABLE",
+      description: "Operator state could not be verified against the configured backend.",
+      title: "Operator state unavailable"
+    });
+    return <ErrorState {...state} onRetry={() => void refetch()} />;
   }
 
   const apiStatus = snapshot.healthRows.find((row) => row.name === "API");
@@ -58,7 +69,7 @@ export function OperatorDashboard() {
           </Badge>
           {snapshot.warnings.map((warning) => (
             <Badge key={warning} tone="neutral">
-              {warning} fallback
+              {warning} unavailable
             </Badge>
           ))}
         </div>
@@ -74,23 +85,42 @@ export function OperatorDashboard() {
             icon={Database}
             label="Queue depth"
             status={
-              snapshot.metrics.queueDepth["settlement-confirmation"] > 5
+              snapshot.metrics.queueDepth["settlement-confirmation"] === null ||
+              (snapshot.metrics.queueDepth["settlement-confirmation"] ?? 0) > 5
                 ? "degraded"
                 : "operational"
             }
-            value={String(snapshot.metrics.queueDepth["settlement-confirmation"])}
+            value={String(snapshot.metrics.queueDepth["settlement-confirmation"] ?? "unknown")}
           />
           <StatusMetric
             icon={Gauge}
             label="Settlement p95"
-            status={snapshot.metrics.settlementLatencyP95Ms > 1_500 ? "degraded" : "operational"}
-            value={`${snapshot.metrics.settlementLatencyP95Ms}ms`}
+            status={
+              snapshot.metrics.settlementLatencyP95Ms === null ||
+              snapshot.metrics.settlementLatencyP95Ms > 1_500
+                ? "degraded"
+                : "operational"
+            }
+            value={
+              snapshot.metrics.settlementLatencyP95Ms === null
+                ? "unknown"
+                : `${snapshot.metrics.settlementLatencyP95Ms}ms`
+            }
           />
           <StatusMetric
             icon={CheckCircle2}
             label="Success rate"
-            status={snapshot.metrics.settlementSuccessRate < 0.9 ? "degraded" : "operational"}
-            value={`${Math.round(snapshot.metrics.settlementSuccessRate * 100)}%`}
+            status={
+              snapshot.metrics.settlementSuccessRate === null ||
+              snapshot.metrics.settlementSuccessRate < 0.9
+                ? "degraded"
+                : "operational"
+            }
+            value={
+              snapshot.metrics.settlementSuccessRate === null
+                ? "unknown"
+                : `${Math.round(snapshot.metrics.settlementSuccessRate * 100)}%`
+            }
           />
         </div>
 
@@ -106,23 +136,23 @@ export function OperatorDashboard() {
               <Network aria-hidden="true" className="h-5 w-5 text-blue-700" />
             </CardHeader>
             <CardBody className="space-y-4">
-              {snapshot.supported.schemes.map((scheme) => (
+              {snapshot.supported.kinds.map((kind) => (
                 <div
-                  key={`${scheme.network}-${scheme.name}`}
+                  key={`${kind.network}-${kind.scheme}`}
                   className="rounded-md border border-slate-200 p-4"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="font-medium text-slate-950">{scheme.network}</p>
-                      <p className="mt-1 text-sm text-slate-600">{scheme.name} payments</p>
+                      <p className="font-medium text-slate-950">{kind.network}</p>
+                      <p className="mt-1 text-sm text-slate-600">{kind.scheme} payments</p>
                     </div>
-                    <Badge tone={scheme.name === "exact" ? "success" : "warning"}>
-                      {scheme.name}
+                    <Badge tone={kind.scheme === "exact" ? "success" : "warning"}>
+                      {kind.scheme}
                     </Badge>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {scheme.assets.map((asset) => (
-                      <Badge key={`${scheme.network}-${scheme.name}-${asset.code}`} tone="info">
+                    {(kind.extra?.assets ?? []).map((asset) => (
+                      <Badge key={`${kind.network}-${kind.scheme}-${asset.code}`} tone="info">
                         {asset.code} / {asset.decimals} decimals
                       </Badge>
                     ))}

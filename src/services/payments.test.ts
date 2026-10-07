@@ -12,19 +12,24 @@ import {
 
 describe("payment activity services", () => {
   it("loads seller resources with filters", () => {
-    expect(loadSellerResources({ sellerId: "seller_atlas_weather" })).toHaveLength(1);
+    expect(loadSellerResources({ sellerId: "seller_atlas_weather" }, "demo")).toHaveLength(1);
     expect(
-      loadSellerResources({
-        sellerId: "seller_atlas_weather",
-        status: "active",
-        type: "http"
-      })[0]?.name
+      loadSellerResources(
+        {
+          sellerId: "seller_atlas_weather",
+          status: "active",
+          type: "http"
+        },
+        "demo"
+      )[0]?.name
     ).toBe("Paid Weather API");
-    expect(loadSellerResources({ sellerId: "seller_atlas_weather", type: "mcp" })).toHaveLength(0);
+    expect(
+      loadSellerResources({ sellerId: "seller_atlas_weather", type: "mcp" }, "demo")
+    ).toHaveLength(0);
   });
 
   it("joins attempts with resources, receipts, and settlements", () => {
-    const activity = loadSellerPaymentActivity("seller_atlas_weather");
+    const activity = loadSellerPaymentActivity("seller_atlas_weather", "demo");
 
     expect(activity).toHaveLength(2);
     expect(activity.some((item) => item.receipt?.id === "receipt_weather_001")).toBe(true);
@@ -33,12 +38,18 @@ describe("payment activity services", () => {
   });
 
   it("filters transaction activity by status and network", () => {
-    expect(loadPaymentActivity({ network: "stellar:testnet", status: "verified" })).toHaveLength(1);
-    expect(loadPaymentActivity({ asset: "USDC", resourceType: "mcp" })[0]?.resource?.type).toBe(
-      "mcp"
-    );
-    expect(loadPaymentActivity({ date: "2026-09-02" })).toHaveLength(3);
-    expect(loadPaymentActivity({ date: "2026-09-03" })).toHaveLength(0);
+    expect(
+      loadPaymentActivity({ network: "stellar:testnet", status: "verified" }, "demo")
+    ).toHaveLength(1);
+    expect(
+      loadPaymentActivity({ asset: "USDC", resourceType: "mcp" }, "demo")[0]?.resource?.type
+    ).toBe("mcp");
+    expect(loadPaymentActivity({ date: "2026-09-02" }, "demo")).toHaveLength(3);
+    expect(loadPaymentActivity({ date: "2026-09-03" }, "demo")).toHaveLength(0);
+  });
+
+  it("rejects fixture activity outside demo mode", () => {
+    expect(() => loadPaymentActivity({}, "local")).toThrow("Bundled fixtures");
   });
 
   it("formats payment amounts and transaction links", () => {

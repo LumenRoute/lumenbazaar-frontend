@@ -15,6 +15,8 @@ import type {
   ResourceType,
   Seller
 } from "@/services/api/schemas";
+import type { RuntimeEnvironment } from "@/config/runtime";
+import { currentRuntimeMode, requireDemoMode } from "@/services/runtime-mode";
 
 export type PaymentActivityStatus = DemoPaymentAttempt["status"] | DemoSettlement["status"];
 
@@ -43,7 +45,11 @@ export type SellerResourceFilters = {
   type?: ResourceType;
 };
 
-export function loadSellerResources(filters: SellerResourceFilters = {}) {
+export function loadSellerResources(
+  filters: SellerResourceFilters = {},
+  mode: RuntimeEnvironment = currentRuntimeMode()
+) {
+  requireDemoMode(mode);
   const sellerId = filters.sellerId ?? "seller_atlas_weather";
 
   return demoPaymentResources().filter(
@@ -57,7 +63,11 @@ export function loadSellerResources(filters: SellerResourceFilters = {}) {
   );
 }
 
-export function loadPaymentActivity(filters: PaymentActivityFilters = {}): PaymentActivity[] {
+export function loadPaymentActivity(
+  filters: PaymentActivityFilters = {},
+  mode: RuntimeEnvironment = currentRuntimeMode()
+): PaymentActivity[] {
+  requireDemoMode(mode);
   return demoPaymentAttempts
     .map((attempt) => ({
       attempt,
@@ -84,8 +94,11 @@ export function loadPaymentActivity(filters: PaymentActivityFilters = {}): Payme
     .sort((left, right) => right.attempt.createdAt.localeCompare(left.attempt.createdAt));
 }
 
-export function loadSellerPaymentActivity(sellerId = "seller_atlas_weather") {
-  return loadPaymentActivity({ sellerId });
+export function loadSellerPaymentActivity(
+  sellerId = "seller_atlas_weather",
+  mode: RuntimeEnvironment = currentRuntimeMode()
+) {
+  return loadPaymentActivity({ sellerId }, mode);
 }
 
 export function paymentActivityStatus(activity: PaymentActivity) {

@@ -9,10 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { ResourceCard } from "@/components/resources/resource-card";
-import { EmptyState } from "@/components/ui/surfaces";
+import { EmptyState, ErrorState } from "@/components/ui/surfaces";
 import { findDemoSeller } from "@/fixtures/lumenbazaar";
 import { queryKeys } from "@/services/api/query";
 import { searchCatalog, type ExploreSearchInput, type ResourceSort } from "@/services/catalog";
+import { normalizeUiError } from "@/services/ui-state";
 
 type ExploreSearchProps = {
   initialFilters: Omit<ExploreSearchInput, "cursor" | "q" | "sort">;
@@ -32,7 +33,7 @@ export function ExploreSearch({ initialFilters, initialQuery, initialSort }: Exp
   const [query, setQuery] = useState(initialQuery);
   const [filters, setFilters] = useState(initialFilters);
   const [sort, setSort] = useState<ResourceSort>(initialSort);
-  const { data, isFetching } = useQuery({
+  const { data, error, isFetching, refetch } = useQuery({
     queryFn: () => searchCatalog({ ...initialFilters, q: initialQuery, sort }),
     queryKey: queryKeys.search({ ...initialFilters, q: initialQuery, sort })
   });
@@ -198,15 +199,28 @@ export function ExploreSearch({ initialFilters, initialQuery, initialSort }: Exp
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={data?.source === "api" ? "success" : "warning"}>
-            {data?.source === "api" ? "API results" : "Demo results"}
-          </Badge>
+          {data ? (
+            <Badge tone={data.source === "api" ? "success" : "warning"}>
+              {data.source === "api" ? "API results" : "Explicit demo results"}
+            </Badge>
+          ) : null}
           {data?.partialResults ? <Badge tone="warning">Partial results</Badge> : null}
         </div>
         <p className="text-sm text-slate-600">
           {isFetching ? "Refreshing" : `${data?.resources.length ?? 0} resources`}
         </p>
       </div>
+
+      {data === undefined && error !== null ? (
+        <ErrorState
+          {...normalizeUiError(error, {
+            code: "BACKEND_UNAVAILABLE",
+            description: "Resource discovery could not be verified against the configured backend.",
+            title: "Catalog unavailable"
+          })}
+          onRetry={() => void refetch()}
+        />
+      ) : null}
 
       {data !== undefined && data.resources.length === 0 ? (
         <EmptyState
@@ -221,7 +235,7 @@ export function ExploreSearch({ initialFilters, initialQuery, initialSort }: Exp
             key={resource.id}
             partialResults={data.partialResults}
             resource={resource}
-            seller={findDemoSeller(resource.sellerId)}
+            seller={data.source === "demo" ? findDemoSeller(resource.sellerId) : undefined}
           />
         ))}
       </div>

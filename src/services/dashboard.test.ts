@@ -73,6 +73,21 @@ describe("dashboard snapshot", () => {
     );
   });
 
+  it("uses fixture metrics only in explicit demo mode", async () => {
+    const snapshot = await loadDashboardSnapshot(
+      {
+        getHealth: async () => Promise.reject(new Error("should not call")),
+        getLatestConformanceRun: async () => Promise.reject(new Error("should not call")),
+        getNetworks: async () => Promise.reject(new Error("should not call")),
+        listResources: async () => Promise.reject(new Error("should not call"))
+      },
+      "demo"
+    );
+
+    expect(snapshot.source).toBe("demo");
+    expect(snapshot.metrics.indexedResourceCount).toBeGreaterThan(0);
+  });
+
   it("formats uptime durations for compact metric cards", () => {
     expect(formatDuration(98_400)).toBe("1d 3h");
   });

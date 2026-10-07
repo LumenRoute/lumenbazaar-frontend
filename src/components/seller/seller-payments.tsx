@@ -4,7 +4,8 @@ import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/surfaces";
+import { EmptyState, ErrorState } from "@/components/ui/surfaces";
+import { isDemoMode, loadRuntimeConfig } from "@/config/runtime";
 import {
   explorerTransactionUrl,
   formatPaymentAmount,
@@ -16,7 +17,25 @@ import {
 import { emptyStateForCollection } from "@/services/ui-state";
 
 export function SellerPayments({ sellerId = "seller_atlas_weather" }: { sellerId?: string }) {
-  const activity = loadSellerPaymentActivity(sellerId);
+  const mode = loadRuntimeConfig().environment;
+
+  if (!isDemoMode(mode)) {
+    return (
+      <>
+        <PageHeader
+          description="Reconcile verification attempts, settlements, failure reasons, receipts, and transaction hashes."
+          title="Seller payments"
+        />
+        <ErrorState
+          code="BACKEND_UNAVAILABLE"
+          description="Seller payment history is not exposed by the current backend contract."
+          title="Seller payments unavailable"
+        />
+      </>
+    );
+  }
+
+  const activity = loadSellerPaymentActivity(sellerId, mode);
   const emptyState = emptyStateForCollection("payments");
 
   return (

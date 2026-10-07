@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import type { ErrorCode, PaymentRequirement } from "@/services/api/schemas";
+import type { ErrorCode, ResourcePaymentSummary } from "@/services/api/schemas";
 
 import { prettyJson } from "./schema-utils";
 
@@ -15,7 +15,7 @@ type PaymentRequirementViewerProps = {
     code: ErrorCode | string;
     message: string;
   }>;
-  requirement: PaymentRequirement;
+  requirement: ResourcePaymentSummary;
 };
 
 export function PaymentRequirementViewer({
@@ -33,9 +33,9 @@ export function PaymentRequirementViewer({
     <Card>
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-950">Payment requirement</h2>
+          <h2 className="text-lg font-semibold text-slate-950">Catalog payment summary</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Exact x402 terms exposed without inspecting raw network logs.
+            Discovery metadata only. The paid endpoint challenge is authoritative.
           </p>
         </div>
         <Button type="button" variant="secondary" onClick={copyPayload}>
@@ -45,20 +45,10 @@ export function PaymentRequirementViewer({
       </CardHeader>
       <CardBody className="space-y-5">
         <dl className="grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-4">
-          <Field label="x402 version" value={requirement.x402Version} />
-          <Field label="Scheme" value={requirement.scheme} />
           <Field label="Network" value={requirement.network} />
           <Field label="Amount" value={`${requirement.amount} ${requirement.assetCode}`} />
           <Field label="Asset issuer" value={requirement.assetIssuer} wrap />
           <Field label="Recipient" value={requirement.payTo} wrap />
-          <Field
-            label="Expiry"
-            value={
-              requirement.expiresAtLedger === null
-                ? "Backend ledger policy"
-                : String(requirement.expiresAtLedger)
-            }
-          />
           <Field label="Resource" value={requirement.resourceId} wrap />
         </dl>
 

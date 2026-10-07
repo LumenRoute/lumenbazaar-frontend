@@ -8,9 +8,10 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/surfaces";
+import { EmptyState, ErrorState } from "@/components/ui/surfaces";
 import { demoSellers } from "@/fixtures/lumenbazaar";
 import type { NetworkId } from "@/config/networks";
+import { isDemoMode, loadRuntimeConfig } from "@/config/runtime";
 import {
   explorerTransactionUrl,
   formatPaymentAmount,
@@ -31,6 +32,8 @@ const allStatuses: Array<PaymentActivityStatus | "all"> = [
 ];
 
 export function TransactionDashboard() {
+  const mode = loadRuntimeConfig().environment;
+  const demo = isDemoMode(mode);
   const [network, setNetwork] = useState<NetworkId | "all">("all");
   const [status, setStatus] = useState<PaymentActivityStatus | "all">("all");
   const [asset, setAsset] = useState("all");
@@ -38,21 +41,43 @@ export function TransactionDashboard() {
   const [date, setDate] = useState("");
   const activity = useMemo(
     () =>
-      loadPaymentActivity({
-        ...(asset === "all" ? {} : { asset }),
-        ...(date === "" ? {} : { date }),
-        ...(network === "all" ? {} : { network }),
-        ...(sellerId === "all" ? {} : { sellerId }),
-        ...(status === "all" ? {} : { status })
-      }),
-    [asset, date, network, sellerId, status]
+      demo
+        ? loadPaymentActivity(
+            {
+              ...(asset === "all" ? {} : { asset }),
+              ...(date === "" ? {} : { date }),
+              ...(network === "all" ? {} : { network }),
+              ...(sellerId === "all" ? {} : { sellerId }),
+              ...(status === "all" ? {} : { status })
+            },
+            mode
+          )
+        : [],
+    [asset, date, demo, mode, network, sellerId, status]
   );
   const assets = useMemo(
-    () => [...new Set(loadPaymentActivity().map((item) => item.attempt.assetCode))],
-    []
+    () =>
+      demo ? [...new Set(loadPaymentActivity({}, mode).map((item) => item.attempt.assetCode))] : [],
+    [demo, mode]
   );
   const hasFilters =
     network !== "all" || status !== "all" || asset !== "all" || sellerId !== "all" || date !== "";
+
+  if (!demo) {
+    return (
+      <>
+        <PageHeader
+          description="Inspect payment attempts, settlements, failure codes, receipts, and Stellar transaction evidence."
+          title="Transactions"
+        />
+        <ErrorState
+          code="BACKEND_UNAVAILABLE"
+          description="A payment-attempt listing endpoint is not available in the reviewed backend contract. No demo transactions are shown in live modes."
+          title="Transactions unavailable"
+        />
+      </>
+    );
+  }
 
   return (
     <>

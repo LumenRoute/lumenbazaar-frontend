@@ -23,7 +23,7 @@ export function ResourceDetailPage({ resourceId }: { resourceId: string }) {
   if (data === undefined || error !== null) {
     const state = normalizeUiError(error, {
       code: "RESOURCE_UNAVAILABLE",
-      description: "The resource detail could not be loaded from the API or local fixtures.",
+      description: "The resource detail could not be verified against the configured backend.",
       title: "Resource unavailable"
     });
 

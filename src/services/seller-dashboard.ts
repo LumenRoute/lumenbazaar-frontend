@@ -1,5 +1,7 @@
 import { demoReceipts, demoResources, demoSellers, findDemoSeller } from "@/fixtures/lumenbazaar";
 import type { Receipt, Resource, Seller } from "@/services/api/schemas";
+import type { RuntimeEnvironment } from "@/config/runtime";
+import { currentRuntimeMode, requireDemoMode } from "@/services/runtime-mode";
 
 export type SellerDashboardSnapshot = {
   identityStatus: "connected" | "missing";
@@ -11,8 +13,10 @@ export type SellerDashboardSnapshot = {
 };
 
 export function loadSellerDashboard(
-  sellerId: string = demoSellers[0]?.id ?? "seller_atlas_weather"
+  sellerId: string = demoSellers[0]?.id ?? "seller_atlas_weather",
+  mode: RuntimeEnvironment = currentRuntimeMode()
 ): SellerDashboardSnapshot {
+  requireDemoMode(mode);
   const seller = findDemoSeller(sellerId) ?? demoSellers[0];
 
   if (seller === undefined) {

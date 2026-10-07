@@ -8,7 +8,8 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/surfaces";
+import { EmptyState, ErrorState } from "@/components/ui/surfaces";
+import { isDemoMode, loadRuntimeConfig } from "@/config/runtime";
 import { findDemoSeller } from "@/fixtures/lumenbazaar";
 import type { Resource, ResourceStatus } from "@/services/api/schemas";
 import { formatPaymentAmount, loadSellerResources, shortHash } from "@/services/payments";
@@ -22,17 +23,24 @@ const statusOptions: Array<{ label: string; value: ResourceStatus | "all" }> = [
 ];
 
 export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sellerId?: string }) {
+  const mode = loadRuntimeConfig().environment;
+  const demo = isDemoMode(mode);
   const [status, setStatus] = useState<ResourceStatus | "all">("all");
   const [disabledIds, setDisabledIds] = useState<Set<string>>(new Set());
-  const seller = findDemoSeller(sellerId);
+  const seller = demo ? findDemoSeller(sellerId) : undefined;
   const emptyState = emptyStateForCollection("resources");
   const resources = useMemo(
     () =>
-      loadSellerResources({
-        sellerId,
-        ...(status === "all" ? {} : { status })
-      }),
-    [sellerId, status]
+      demo
+        ? loadSellerResources(
+            {
+              sellerId,
+              ...(status === "all" ? {} : { status })
+            },
+            mode
+          )
+        : [],
+    [demo, mode, sellerId, status]
   ).map((resource) =>
     disabledIds.has(resource.id)
       ? {
@@ -41,6 +49,22 @@ export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sell
         }
       : resource
   );
+
+  if (!demo) {
+    return (
+      <>
+        <PageHeader
+          description="Manage draft, active, and inactive paid resources owned by the current seller."
+          title="Seller resources"
+        />
+        <ErrorState
+          code="BACKEND_UNAVAILABLE"
+          description="Seller resource management is unavailable because the current backend contract does not expose seller-scoped listing."
+          title="Seller resources unavailable"
+        />
+      </>
+    );
+  }
 
   return (
     <>
