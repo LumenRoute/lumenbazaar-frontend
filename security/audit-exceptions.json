@@ -1,0 +1,42 @@
+{
+  "reviewedAt": "2026-10-07",
+  "expiresAt": "2026-11-07",
+  "owner": "frontend-maintainers",
+  "advisories": [
+    {
+      "id": 1112030,
+      "module": "elliptic",
+      "severity": "low",
+      "path": "@creit.tech/stellar-wallets-kit > @hot-wallet/sdk > @near-js/crypto > secp256k1 > elliptic",
+      "rationale": "No patched elliptic release exists. LumenBazaar enables the Freighter module and does not invoke the hot-wallet NEAR signer path. Re-review wallet-kit upstream before expiry."
+    },
+    {
+      "id": 1119441,
+      "module": "uuid",
+      "severity": "moderate",
+      "path": "@creit.tech/stellar-wallets-kit > @hot-wallet/sdk > @solana/web3.js > jayson > uuid",
+      "rationale": "The affected buffer APIs are in an unused Solana JSON-RPC branch. Forcing uuid 11 over jayson's uuid 8 contract is an incompatible major override. Re-review wallet-kit upstream before expiry."
+    },
+    {
+      "id": 1164823,
+      "module": "stream-json",
+      "severity": "moderate",
+      "path": "@creit.tech/stellar-wallets-kit > @hot-wallet/sdk > @solana/web3.js > jayson > stream-json",
+      "rationale": "The affected streaming parser is in an unused Solana JSON-RPC branch. Forcing stream-json 3 over jayson's 1.x contract is an incompatible major override. Re-review wallet-kit upstream before expiry."
+    },
+    {
+      "id": 1241262,
+      "module": "stream-json",
+      "severity": "moderate",
+      "path": "@creit.tech/stellar-wallets-kit > @hot-wallet/sdk > @solana/web3.js > jayson > stream-json",
+      "rationale": "The affected JSONC parser is in an unused Solana JSON-RPC branch. Forcing stream-json 3 over jayson's 1.x contract is an incompatible major override. Re-review wallet-kit upstream before expiry."
+    },
+    {
+      "id": 1241263,
+      "module": "stream-json",
+      "severity": "moderate",
+      "path": "@creit.tech/stellar-wallets-kit > @hot-wallet/sdk > @solana/web3.js > jayson > stream-json",
+      "rationale": "The affected assembler is in an unused Solana JSON-RPC branch. Forcing stream-json 3 over jayson's 1.x contract is an incompatible major override. Re-review wallet-kit upstream before expiry."
+    }
+  ]
+}
