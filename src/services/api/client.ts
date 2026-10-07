@@ -141,6 +141,16 @@ export class LumenBazaarApiClient {
     });
   }
 
+  listSellerResources(
+    sellerId: string,
+    query: Omit<ListResourcesQuery, "sellerId"> = {}
+  ): Promise<ResourcesPage> {
+    return this.request(`/v1/sellers/${encodeURIComponent(sellerId)}/resources`, {
+      query: listResourcesQuerySchema.omit({ sellerId: true }).parse(query),
+      schema: resourcesPageSchema
+    });
+  }
+
   searchResources(query: SearchResourcesQuery = {}): Promise<SearchResult> {
     return this.request("/v1/discovery/search", {
       query: searchResourcesQuerySchema.parse(query),

@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState, ErrorState } from "@/components/ui/surfaces";
-import { demoSellers } from "@/fixtures/lumenbazaar";
 import type { NetworkId } from "@/config/networks";
 import { isDemoMode, loadRuntimeConfig } from "@/config/runtime";
 import {
@@ -39,6 +38,10 @@ export function TransactionDashboard() {
   const [asset, setAsset] = useState("all");
   const [sellerId, setSellerId] = useState("all");
   const [date, setDate] = useState("");
+  const unfilteredActivity = useMemo(
+    () => (demo ? loadPaymentActivity({}, mode) : []),
+    [demo, mode]
+  );
   const activity = useMemo(
     () =>
       demo
@@ -56,10 +59,20 @@ export function TransactionDashboard() {
     [asset, date, demo, mode, network, sellerId, status]
   );
   const assets = useMemo(
-    () =>
-      demo ? [...new Set(loadPaymentActivity({}, mode).map((item) => item.attempt.assetCode))] : [],
-    [demo, mode]
+    () => [...new Set(unfilteredActivity.map((item) => item.attempt.assetCode))],
+    [unfilteredActivity]
   );
+  const sellers = useMemo(
+    () => [
+      ...new Map(
+        unfilteredActivity.flatMap((item) =>
+          item.seller === undefined ? [] : [[item.seller.id, item.seller] as const]
+        )
+      ).values()
+    ],
+    [unfilteredActivity]
+  );
+  const loadedAt = unfilteredActivity[0]?.attempt.createdAt;
   const hasFilters =
     network !== "all" || status !== "all" || asset !== "all" || sellerId !== "all" || date !== "";
 
@@ -71,7 +84,7 @@ export function TransactionDashboard() {
           title="Transactions"
         />
         <ErrorState
-          code="BACKEND_UNAVAILABLE"
+          code="UNSUPPORTED_CAPABILITY"
           description="A payment-attempt listing endpoint is not available in the reviewed backend contract. No demo transactions are shown in live modes."
           title="Transactions unavailable"
         />
@@ -87,6 +100,12 @@ export function TransactionDashboard() {
       />
 
       <div className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <Badge tone="warning">Explicit demo data</Badge>
+          {loadedAt ? (
+            <Badge tone="neutral">Loaded {new Date(loadedAt).toLocaleString()}</Badge>
+          ) : null}
+        </div>
         <Card>
           <CardHeader className="flex flex-col gap-1">
             <h2 className="flex items-center gap-2 text-base font-semibold text-slate-950">
@@ -150,7 +169,7 @@ export function TransactionDashboard() {
                 value={sellerId}
               >
                 <option value="all">All sellers</option>
-                {demoSellers.map((seller) => (
+                {sellers.map((seller) => (
                   <option key={seller.id} value={seller.id}>
                     {seller.displayName}
                   </option>

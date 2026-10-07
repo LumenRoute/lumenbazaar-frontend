@@ -49,12 +49,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
                 <span
-                  className={`h-2 w-2 rounded-full ${config.environment === "demo" ? "bg-amber-500" : "bg-emerald-500"}`}
+                  className={`h-2 w-2 rounded-full ${config.environment === "demo" ? "bg-amber-500" : "bg-slate-400"}`}
                   aria-hidden="true"
                 />
                 {config.environment === "demo"
                   ? "Demo data"
-                  : `${config.environment} / ${network.label}`}
+                  : `${config.environment} mode / ${network.label}`}
               </div>
               <WalletStatus />
             </div>

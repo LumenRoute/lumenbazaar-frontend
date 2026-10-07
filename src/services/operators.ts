@@ -4,7 +4,8 @@ import type {
   Health,
   NetworksResponse,
   Readiness,
-  SupportedPaymentSchemes
+  SupportedPaymentSchemes,
+  Version
 } from "@/services/api/schemas";
 import { isDemoMode, type RuntimeEnvironment } from "@/config/runtime";
 import {
@@ -15,7 +16,7 @@ import {
 } from "@/fixtures/lumenbazaar";
 import { currentRuntimeMode } from "@/services/runtime-mode";
 
-export type OperatorHealthStatus = "operational" | "degraded" | "down";
+export type OperatorHealthStatus = "operational" | "degraded" | "down" | "unknown";
 
 export type OperatorHealthRow = {
   checkedAt: string;
@@ -25,7 +26,8 @@ export type OperatorHealthRow = {
 };
 
 export type OperatorSnapshot = {
-  conformance: ConformanceRun;
+  checkedAt: string;
+  conformance: ConformanceRun | null;
   healthRows: OperatorHealthRow[];
   metrics: {
     queueDepth: Record<string, number | null>;
@@ -33,14 +35,20 @@ export type OperatorSnapshot = {
     settlementSuccessRate: number | null;
   };
   networks: NetworksResponse["networks"];
-  source: "api" | "demo";
+  source: "api" | "demo" | "partial" | "unavailable";
   supported: SupportedPaymentSchemes;
+  version: Version | null;
   warnings: string[];
 };
 
 type OperatorClient = Pick<
   LumenBazaarApiClient,
-  "getHealth" | "getLatestConformanceRun" | "getNetworks" | "getReadiness" | "getSupported"
+  | "getHealth"
+  | "getLatestConformanceRun"
+  | "getNetworks"
+  | "getReadiness"
+  | "getSupported"
+  | "getVersion"
 >;
 
 export async function loadOperatorSnapshot(
@@ -48,38 +56,71 @@ export async function loadOperatorSnapshot(
   mode: RuntimeEnvironment = currentRuntimeMode()
 ): Promise<OperatorSnapshot> {
   if (isDemoMode(mode)) {
+    const checkedAt = new Date().toISOString();
     return {
+      checkedAt,
       conformance: demoConformanceRun,
       healthRows: demoOperatorHealthRows(),
       metrics: demoOperatorMetrics,
       networks: demoNetworks(),
       source: "demo",
       supported: demoSupportedPaymentSchemes,
+      version: {
+        commit: "demo-build",
+        environment: "demo",
+        service: "lumenbazaar-backend",
+        version: "0.1.0"
+      },
       warnings: []
     };
   }
 
-  const [health, readiness, networksResponse, supported, conformance] = await Promise.all([
-    client.getHealth(),
-    client.getReadiness(),
-    client.getNetworks(),
-    client.getSupported(),
-    client.getLatestConformanceRun()
-  ]);
-  const networks = networksResponse.networks;
+  const checkedAt = new Date().toISOString();
+  const [health, readiness, networksResponse, supported, conformance, version] =
+    await Promise.allSettled([
+      client.getHealth(),
+      client.getReadiness(),
+      client.getNetworks(),
+      client.getSupported(),
+      client.getLatestConformanceRun(),
+      client.getVersion()
+    ]);
+  const networks = networksResponse.status === "fulfilled" ? networksResponse.value.networks : [];
+  const results = {
+    health,
+    readiness,
+    networks: networksResponse,
+    supported,
+    conformance,
+    version
+  };
+  const unavailable = Object.entries(results)
+    .filter(([, result]) => result.status === "rejected")
+    .map(([name]) => name);
+  const successful = Object.keys(results).length - unavailable.length;
 
   return {
-    conformance,
-    healthRows: liveHealthRows(health, readiness, { networks }),
+    checkedAt,
+    conformance: conformance.status === "fulfilled" ? conformance.value : null,
+    healthRows: liveHealthRows(
+      health.status === "fulfilled" ? health.value : undefined,
+      readiness.status === "fulfilled" ? readiness.value : undefined,
+      { networks },
+      checkedAt
+    ),
     metrics: {
       queueDepth: { "settlement-confirmation": null },
       settlementLatencyP95Ms: null,
       settlementSuccessRate: null
     },
     networks,
-    source: "api",
-    supported,
-    warnings: ["metrics"]
+    source: successful === 0 ? "unavailable" : unavailable.length === 0 ? "api" : "partial",
+    supported:
+      supported.status === "fulfilled"
+        ? supported.value
+        : { extensions: [], kinds: [], signers: {} },
+    version: version.status === "fulfilled" ? version.value : null,
+    warnings: [...unavailable, "metrics"]
   };
 }
 
@@ -113,22 +154,28 @@ export function statusTone(status: OperatorHealthStatus | ConformanceRun["status
     return "warning";
   }
 
+  if (status === "unknown") return "neutral";
+
   return "danger";
 }
 
 function liveHealthRows(
-  health: Health,
-  readiness: Readiness,
-  networks: NetworksResponse
+  health: Health | undefined,
+  readiness: Readiness | undefined,
+  networks: NetworksResponse,
+  checkedAt: string
 ): OperatorHealthRow[] {
-  const checkedAt = new Date().toISOString();
-  const apiStatus: OperatorHealthStatus = health.ok ? "operational" : "down";
+  const apiStatus: OperatorHealthStatus =
+    health === undefined ? "unknown" : health.ok ? "operational" : "down";
   const configuredNetworks = networks.networks.length;
 
   return [
     {
       checkedAt,
-      detail: `${health.service} responded for ${health.app}.`,
+      detail:
+        health === undefined
+          ? "API health could not be verified."
+          : `${health.service} responded for ${health.app}.`,
       name: "API",
       status: apiStatus
     },
@@ -136,41 +183,46 @@ function liveHealthRows(
       checkedAt,
       detail: "Worker queue telemetry is unavailable through the JSON API.",
       name: "Worker",
-      status: "degraded"
-    },
-    {
-      checkedAt,
-      detail: "Search is available only when backend readiness succeeds.",
-      name: "Search",
-      status: readiness.ok ? "operational" : "down"
-    },
-    {
-      checkedAt,
-      detail: readiness.checks.redis.detail ?? "Redis readiness check completed.",
-      name: "Redis",
-      status: readinessStatus(readiness.checks.redis.status)
-    },
-    {
-      checkedAt,
-      detail: readiness.checks.database.detail ?? "Database readiness check completed.",
-      name: "Postgres",
-      status: readinessStatus(readiness.checks.database.status)
+      status: "unknown"
     },
     {
       checkedAt,
       detail:
-        readiness.checks.stellarRpc.detail ??
+        readiness === undefined
+          ? "Search readiness could not be verified."
+          : "Search follows backend readiness.",
+      name: "Search",
+      status: readiness === undefined ? "unknown" : readiness.ok ? "operational" : "down"
+    },
+    {
+      checkedAt,
+      detail: readiness?.checks.redis.detail ?? "Redis readiness is unavailable.",
+      name: "Redis",
+      status: readiness === undefined ? "unknown" : readinessStatus(readiness.checks.redis.status)
+    },
+    {
+      checkedAt,
+      detail: readiness?.checks.database.detail ?? "Database readiness is unavailable.",
+      name: "Postgres",
+      status:
+        readiness === undefined ? "unknown" : readinessStatus(readiness.checks.database.status)
+    },
+    {
+      checkedAt,
+      detail:
+        readiness?.checks.stellarRpc.detail ??
         `${configuredNetworks} configured Stellar RPC endpoint(s).`,
       name: "RPC",
-      status: readinessStatus(readiness.checks.stellarRpc.status)
+      status:
+        readiness === undefined ? "unknown" : readinessStatus(readiness.checks.stellarRpc.status)
     },
     {
       checkedAt,
       detail:
-        readiness.checks.horizon.detail ??
+        readiness?.checks.horizon.detail ??
         `${configuredNetworks} configured Stellar Horizon endpoint(s).`,
       name: "Horizon",
-      status: readinessStatus(readiness.checks.horizon.status)
+      status: readiness === undefined ? "unknown" : readinessStatus(readiness.checks.horizon.status)
     }
   ];
 }

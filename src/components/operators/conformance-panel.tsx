@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { DataFreshnessBadge } from "@/components/ui/data-freshness-badge";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/surfaces";
 import { queryKeys } from "@/services/api/query";
 import { conformanceEndpointStatus, loadOperatorSnapshot, statusTone } from "@/services/operators";
@@ -42,6 +43,29 @@ export function ConformancePanel() {
     return <ErrorState {...state} onRetry={() => void refetch()} />;
   }
 
+  if (snapshot.conformance === null) {
+    return (
+      <>
+        <PageHeader
+          actions={
+            <Button onClick={() => void refetch()} type="button" variant="secondary">
+              <RefreshCcw aria-hidden="true" className="h-4 w-4" />
+              Refresh
+            </Button>
+          }
+          description="Review facilitator conformance for supported schemes, exact verification, exact settlement, and reserved capped-session coverage."
+          title="Conformance"
+        />
+        <ErrorState
+          code="CONFORMANCE_UNAVAILABLE"
+          description="No live conformance run could be verified from the configured backend."
+          onRetry={() => void refetch()}
+          title="Conformance unavailable"
+        />
+      </>
+    );
+  }
+
   const run = snapshot.conformance;
   const exactResults = run.results.filter((result) => result.scheme === "exact");
   const uptoResults = run.results.filter((result) => result.scheme === "upto");
@@ -63,8 +87,13 @@ export function ConformancePanel() {
       <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={snapshot.source === "api" ? "success" : "warning"}>
-            {snapshot.source === "api" ? "API data" : "Local demo data"}
+            {snapshot.source === "api"
+              ? "Live API data"
+              : snapshot.source === "demo"
+                ? "Explicit demo data"
+                : "Partial API data"}
           </Badge>
+          <DataFreshnessBadge observedAt={snapshot.checkedAt} source={snapshot.source} />
           {snapshot.warnings.map((warning) => (
             <Badge key={warning} tone="neutral">
               {warning} unavailable

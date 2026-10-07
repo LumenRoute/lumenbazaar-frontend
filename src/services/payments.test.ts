@@ -5,6 +5,7 @@ import {
   formatPaymentAmount,
   loadPaymentActivity,
   loadSellerPaymentActivity,
+  loadSellerResourceSnapshot,
   loadSellerResources,
   paymentActivityStatus,
   shortHash
@@ -50,6 +51,43 @@ describe("payment activity services", () => {
 
   it("rejects fixture activity outside demo mode", () => {
     expect(() => loadPaymentActivity({}, "local")).toThrow("Bundled fixtures");
+  });
+
+  it("uses the seller resource API in live mode and preserves an empty result", async () => {
+    const client = {
+      listSellerResources: vi.fn(async () => ({ nextCursor: null, resources: [] }))
+    };
+
+    const snapshot = await loadSellerResourceSnapshot(
+      { sellerId: "seller_live", status: "active" },
+      client,
+      "testnet"
+    );
+
+    expect(client.listSellerResources).toHaveBeenCalledWith("seller_live", {
+      asset: undefined,
+      network: undefined,
+      status: "active",
+      type: undefined
+    });
+    expect(snapshot).toMatchObject({ resources: [], source: "api" });
+    expect(snapshot.fetchedAt).toEqual(expect.any(String));
+  });
+
+  it("loads seller resource fixtures only in explicit demo mode", async () => {
+    const client = {
+      listSellerResources: vi.fn(async () => ({ nextCursor: null, resources: [] }))
+    };
+
+    const snapshot = await loadSellerResourceSnapshot(
+      { sellerId: "seller_atlas_weather" },
+      client,
+      "demo"
+    );
+
+    expect(client.listSellerResources).not.toHaveBeenCalled();
+    expect(snapshot.source).toBe("demo");
+    expect(snapshot.resources).toHaveLength(1);
   });
 
   it("formats payment amounts and transaction links", () => {

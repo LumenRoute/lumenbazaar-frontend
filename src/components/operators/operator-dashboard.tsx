@@ -5,6 +5,7 @@ import {
   Activity,
   CheckCircle2,
   Database,
+  ExternalLink,
   Gauge,
   Network,
   RefreshCcw,
@@ -16,7 +17,9 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { DataFreshnessBadge } from "@/components/ui/data-freshness-badge";
 import { ErrorState, LoadingState } from "@/components/ui/surfaces";
+import { loadRuntimeConfig } from "@/config/runtime";
 import { queryKeys } from "@/services/api/query";
 import { loadOperatorSnapshot, statusTone } from "@/services/operators";
 import { normalizeUiError } from "@/services/ui-state";
@@ -48,6 +51,8 @@ export function OperatorDashboard() {
   const apiStatus = snapshot.healthRows.find((row) => row.name === "API");
   const rpcStatus = snapshot.healthRows.find((row) => row.name === "RPC");
   const horizonStatus = snapshot.healthRows.find((row) => row.name === "Horizon");
+  const settlementQueueDepth = snapshot.metrics.queueDepth["settlement-confirmation"] ?? null;
+  const config = loadRuntimeConfig();
 
   return (
     <>
@@ -64,9 +69,18 @@ export function OperatorDashboard() {
 
       <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={snapshot.source === "api" ? "success" : "warning"}>
-            {snapshot.source === "api" ? "API data" : "Local demo data"}
+          <Badge
+            tone={
+              snapshot.source === "api"
+                ? "success"
+                : snapshot.source === "unavailable"
+                  ? "danger"
+                  : "warning"
+            }
+          >
+            {sourceLabel(snapshot.source)}
           </Badge>
+          <DataFreshnessBadge observedAt={snapshot.checkedAt} source={snapshot.source} />
           {snapshot.warnings.map((warning) => (
             <Badge key={warning} tone="neutral">
               {warning} unavailable
@@ -78,28 +92,30 @@ export function OperatorDashboard() {
           <StatusMetric
             icon={Activity}
             label="API"
-            status={apiStatus?.status ?? "degraded"}
+            status={apiStatus?.status ?? "unknown"}
             value={apiStatus?.status ?? "unknown"}
           />
           <StatusMetric
             icon={Database}
             label="Queue depth"
             status={
-              snapshot.metrics.queueDepth["settlement-confirmation"] === null ||
-              (snapshot.metrics.queueDepth["settlement-confirmation"] ?? 0) > 5
-                ? "degraded"
-                : "operational"
+              settlementQueueDepth === null
+                ? "unknown"
+                : settlementQueueDepth > 5
+                  ? "degraded"
+                  : "operational"
             }
-            value={String(snapshot.metrics.queueDepth["settlement-confirmation"] ?? "unknown")}
+            value={String(settlementQueueDepth ?? "unknown")}
           />
           <StatusMetric
             icon={Gauge}
             label="Settlement p95"
             status={
-              snapshot.metrics.settlementLatencyP95Ms === null ||
-              snapshot.metrics.settlementLatencyP95Ms > 1_500
-                ? "degraded"
-                : "operational"
+              snapshot.metrics.settlementLatencyP95Ms === null
+                ? "unknown"
+                : snapshot.metrics.settlementLatencyP95Ms > 1_500
+                  ? "degraded"
+                  : "operational"
             }
             value={
               snapshot.metrics.settlementLatencyP95Ms === null
@@ -111,10 +127,11 @@ export function OperatorDashboard() {
             icon={CheckCircle2}
             label="Success rate"
             status={
-              snapshot.metrics.settlementSuccessRate === null ||
-              snapshot.metrics.settlementSuccessRate < 0.9
-                ? "degraded"
-                : "operational"
+              snapshot.metrics.settlementSuccessRate === null
+                ? "unknown"
+                : snapshot.metrics.settlementSuccessRate < 0.9
+                  ? "degraded"
+                  : "operational"
             }
             value={
               snapshot.metrics.settlementSuccessRate === null
@@ -159,6 +176,9 @@ export function OperatorDashboard() {
                   </div>
                 </div>
               ))}
+              {snapshot.supported.kinds.length === 0 ? (
+                <p className="text-sm text-slate-600">Supported schemes are unavailable.</p>
+              ) : null}
             </CardBody>
           </Card>
 
@@ -193,6 +213,46 @@ export function OperatorDashboard() {
             </CardBody>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader>
+            <h2 className="text-lg font-semibold text-slate-950">Release evidence</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Backend identity and reviewer-verifiable source artifacts.
+            </p>
+          </CardHeader>
+          <CardBody className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <Badge tone={snapshot.version === null ? "warning" : "info"}>
+                API {snapshot.version?.version ?? "unknown"}
+              </Badge>
+              <Badge tone="neutral">Commit {snapshot.version?.commit ?? "unknown"}</Badge>
+              <Badge tone="neutral">Conformance {snapshot.conformance?.id ?? "unavailable"}</Badge>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <EvidenceLink href={config.apiBaseUrl} label="Backend" />
+              <EvidenceLink href={`${config.apiBaseUrl}/openapi.json`} label="OpenAPI" />
+              <EvidenceLink
+                href="https://github.com/LumenRoute/lumenbazaar-backend"
+                label="Backend source"
+              />
+              <EvidenceLink
+                href="https://github.com/LumenRoute/lumenbazaar-contracts"
+                label="Contracts"
+              />
+              <EvidenceLink
+                href="https://github.com/LumenRoute/lumenbazaar-docs"
+                label="Documentation"
+              />
+              {snapshot.version?.commit !== undefined ? (
+                <EvidenceLink
+                  href={`https://github.com/LumenRoute/lumenbazaar-backend/commit/${snapshot.version.commit}`}
+                  label="Release commit"
+                />
+              ) : null}
+            </div>
+          </CardBody>
+        </Card>
       </div>
     </>
   );
@@ -206,7 +266,7 @@ function StatusMetric({
 }: {
   icon: LucideIcon;
   label: string;
-  status: "operational" | "degraded" | "down";
+  status: "operational" | "degraded" | "down" | "unknown";
   value: string;
 }) {
   return (
@@ -223,4 +283,25 @@ function StatusMetric({
       </CardBody>
     </Card>
   );
+}
+
+function EvidenceLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      className="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+      href={href}
+      rel="noreferrer"
+      target="_blank"
+    >
+      <ExternalLink aria-hidden="true" className="h-4 w-4" />
+      {label}
+    </a>
+  );
+}
+
+function sourceLabel(source: "api" | "demo" | "partial" | "unavailable") {
+  if (source === "api") return "Live API data";
+  if (source === "demo") return "Explicit demo data";
+  if (source === "partial") return "Partial API data";
+  return "API unavailable";
 }

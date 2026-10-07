@@ -5,6 +5,7 @@ import { Activity, Database, Gauge, Store, WalletCards, type LucideIcon } from "
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { DataFreshnessBadge } from "@/components/ui/data-freshness-badge";
 import { queryKeys } from "@/services/api/query";
 import { formatDuration, loadDashboardSnapshot } from "@/services/dashboard";
 
@@ -84,6 +85,7 @@ export function DashboardMetrics() {
             {warning} unavailable
           </Badge>
         ))}
+        <DataFreshnessBadge observedAt={snapshot.checkedAt} source={snapshot.source} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

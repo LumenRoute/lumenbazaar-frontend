@@ -22,6 +22,7 @@ export type ExploreSearchInput = {
 };
 
 export type ExploreSearchResult = SearchResult & {
+  fetchedAt: string;
   source: "api" | "demo";
 };
 
@@ -34,6 +35,7 @@ export async function searchCatalog(
 ): Promise<ExploreSearchResult> {
   if (isDemoMode(mode)) {
     return {
+      fetchedAt: new Date().toISOString(),
       nextCursor: null,
       partialResults: false,
       ranking: {
@@ -67,6 +69,7 @@ export async function searchCatalog(
 
   return {
     ...sortSearchResult(result, input.sort ?? "relevance"),
+    fetchedAt: new Date().toISOString(),
     source: "api"
   };
 }

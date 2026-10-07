@@ -6,11 +6,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { DataFreshnessBadge } from "@/components/ui/data-freshness-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { ResourceCard } from "@/components/resources/resource-card";
 import { EmptyState, ErrorState } from "@/components/ui/surfaces";
-import { findDemoSeller } from "@/fixtures/lumenbazaar";
 import { queryKeys } from "@/services/api/query";
 import { searchCatalog, type ExploreSearchInput, type ResourceSort } from "@/services/catalog";
 import { normalizeUiError } from "@/services/ui-state";
@@ -205,6 +205,7 @@ export function ExploreSearch({ initialFilters, initialQuery, initialSort }: Exp
             </Badge>
           ) : null}
           {data?.partialResults ? <Badge tone="warning">Partial results</Badge> : null}
+          {data ? <DataFreshnessBadge observedAt={data.fetchedAt} source={data.source} /> : null}
         </div>
         <p className="text-sm text-slate-600">
           {isFetching ? "Refreshing" : `${data?.resources.length ?? 0} resources`}
@@ -235,7 +236,6 @@ export function ExploreSearch({ initialFilters, initialQuery, initialSort }: Exp
             key={resource.id}
             partialResults={data.partialResults}
             resource={resource}
-            seller={data.source === "demo" ? findDemoSeller(resource.sellerId) : undefined}
           />
         ))}
       </div>

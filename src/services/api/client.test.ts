@@ -72,6 +72,32 @@ describe("LumenBazaarApiClient", () => {
     expect(requestUrl.searchParams.get("type")).toBe("http");
   });
 
+  it("loads a seller resource collection from the scoped API route", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({
+        nextCursor: null,
+        resources: []
+      })
+    );
+    const client = new LumenBazaarApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      validateCompatibility: false
+    });
+
+    const page = await client.listSellerResources("seller/live", {
+      network: "stellar:testnet",
+      status: "active"
+    });
+    const calls = fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>;
+    const url = new URL(String(calls[0]?.[0]));
+
+    expect(url.pathname).toBe("/v1/sellers/seller%2Flive/resources");
+    expect(url.searchParams.get("network")).toBe("stellar:testnet");
+    expect(url.searchParams.get("status")).toBe("active");
+    expect(page.resources).toEqual([]);
+  });
+
   it("converts structured API failures into typed errors", async () => {
     const fetchImpl = vi.fn(async () =>
       Response.json(

@@ -8,6 +8,7 @@ import {
   type DemoSettlement
 } from "@/fixtures/lumenbazaar";
 import { getNetworkConfig, type NetworkId } from "@/config/networks";
+import { apiClient, type LumenBazaarApiClient } from "@/services/api/client";
 import type {
   Receipt,
   Resource,
@@ -44,6 +45,41 @@ export type SellerResourceFilters = {
   status?: ResourceStatus;
   type?: ResourceType;
 };
+
+export type SellerResourceSnapshot = {
+  fetchedAt: string;
+  resources: Resource[];
+  source: "api" | "demo";
+};
+
+type SellerResourceClient = Pick<LumenBazaarApiClient, "listSellerResources">;
+
+export async function loadSellerResourceSnapshot(
+  filters: SellerResourceFilters = {},
+  client: SellerResourceClient = apiClient,
+  mode: RuntimeEnvironment = currentRuntimeMode()
+): Promise<SellerResourceSnapshot> {
+  if (mode === "demo") {
+    return {
+      fetchedAt: new Date().toISOString(),
+      resources: loadSellerResources(filters, mode),
+      source: "demo"
+    };
+  }
+
+  const sellerId = filters.sellerId ?? "seller_atlas_weather";
+  const page = await client.listSellerResources(sellerId, {
+    asset: filters.asset,
+    network: filters.network,
+    status: filters.status,
+    type: filters.type
+  });
+  return {
+    fetchedAt: new Date().toISOString(),
+    resources: page.resources,
+    source: "api"
+  };
+}
 
 export function loadSellerResources(
   filters: SellerResourceFilters = {},

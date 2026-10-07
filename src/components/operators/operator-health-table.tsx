@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { DataFreshnessBadge } from "@/components/ui/data-freshness-badge";
 import { ErrorState, LoadingState } from "@/components/ui/surfaces";
 import { queryKeys } from "@/services/api/query";
 import { loadOperatorSnapshot, statusTone, type OperatorHealthRow } from "@/services/operators";
@@ -51,9 +52,24 @@ export function OperatorHealthPage() {
 
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={snapshot.source === "api" ? "success" : "warning"}>
-            {snapshot.source === "api" ? "API data" : "Local demo data"}
+          <Badge
+            tone={
+              snapshot.source === "api"
+                ? "success"
+                : snapshot.source === "unavailable"
+                  ? "danger"
+                  : "warning"
+            }
+          >
+            {snapshot.source === "api"
+              ? "Live API data"
+              : snapshot.source === "demo"
+                ? "Explicit demo data"
+                : snapshot.source === "partial"
+                  ? "Partial API data"
+                  : "API unavailable"}
           </Badge>
+          <DataFreshnessBadge observedAt={snapshot.checkedAt} source={snapshot.source} />
           {snapshot.warnings.map((warning) => (
             <Badge key={warning} tone="neutral">
               {warning} unavailable

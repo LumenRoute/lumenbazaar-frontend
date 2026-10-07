@@ -14,6 +14,7 @@ export type DashboardMetrics = {
 };
 
 export type DashboardSnapshot = {
+  checkedAt: string;
   metrics: DashboardMetrics;
   source: "api" | "demo" | "partial" | "unavailable";
   warnings: string[];
@@ -30,6 +31,7 @@ export async function loadDashboardSnapshot(
 ): Promise<DashboardSnapshot> {
   if (isDemoMode(mode)) {
     return {
+      checkedAt: new Date().toISOString(),
       metrics: demoDashboardMetrics,
       source: "demo",
       warnings: []
@@ -58,6 +60,7 @@ export async function loadDashboardSnapshot(
     conformanceResult.status === "fulfilled" ? conformanceResult.value.status : "unavailable";
 
   return {
+    checkedAt: new Date().toISOString(),
     metrics: {
       activeSellerCount: null,
       apiUptimeSeconds: null,

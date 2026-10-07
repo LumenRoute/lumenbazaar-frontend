@@ -27,8 +27,8 @@ export function SellerPayments({ sellerId = "seller_atlas_weather" }: { sellerId
           title="Seller payments"
         />
         <ErrorState
-          code="BACKEND_UNAVAILABLE"
-          description="Seller payment history is not exposed by the current backend contract."
+          code="UNSUPPORTED_CAPABILITY"
+          description="Seller payment history is not exposed by the current backend contract. No demo payments are shown in live modes."
           title="Seller payments unavailable"
         />
       </>
@@ -44,6 +44,15 @@ export function SellerPayments({ sellerId = "seller_atlas_weather" }: { sellerId
         description="Reconcile verification attempts, settlements, failure reasons, receipts, and transaction hashes."
         title="Seller payments"
       />
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Badge tone="warning">Explicit demo data</Badge>
+        {activity[0] ? (
+          <Badge tone="neutral">
+            Loaded {new Date(activity[0].attempt.createdAt).toLocaleString()}
+          </Badge>
+        ) : null}
+      </div>
 
       {activity.length === 0 ? (
         <EmptyState title={emptyState.title} description={emptyState.description} />
