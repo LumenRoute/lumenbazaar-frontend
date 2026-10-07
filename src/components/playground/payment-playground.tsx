@@ -15,13 +15,17 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { ErrorState } from "@/components/ui/surfaces";
+import { isDemoMode, loadRuntimeConfig } from "@/config/runtime";
 import { demoResources } from "@/fixtures/lumenbazaar";
 import { apiClient } from "@/services/api/client";
-import type {
-  PaymentPayload,
-  PaymentVerification,
-  Resource,
-  Settlement
+import {
+  paymentFlowStateLabels,
+  type PaymentFlowState,
+  type PaymentPayload,
+  type PaymentVerification,
+  type Resource,
+  type Settlement
 } from "@/services/api/schemas";
 import {
   buildPaymentRequiredPreview,
@@ -36,6 +40,26 @@ import { explorerTransactionUrl, shortHash } from "@/services/payments";
 import { normalizeUiError, redactSensitivePaymentData } from "@/services/ui-state";
 
 export function PaymentPlayground() {
+  if (!isDemoMode(loadRuntimeConfig().environment)) {
+    return (
+      <>
+        <PageHeader
+          description="Select a resource, inspect exact x402 payment requirements, verify a payload, and inspect settlement evidence."
+          title="Payment playground"
+        />
+        <ErrorState
+          code="BACKEND_UNAVAILABLE"
+          description="The fixture playground is disabled outside explicit demo mode. Live paid-resource handling is enabled only after the x402 v2 challenge flow is available."
+          title="Payment playground unavailable"
+        />
+      </>
+    );
+  }
+
+  return <DemoPaymentPlayground />;
+}
+
+function DemoPaymentPlayground() {
   const [selectedResourceId, setSelectedResourceId] = useState(demoResources[0]?.id ?? "");
   const [mode, setMode] = useState<PlaygroundAuthorizationMode>("simulation");
   const [preview, setPreview] = useState<PaymentRequiredPreview | null>(null);
@@ -114,12 +138,7 @@ export function PaymentPlayground() {
     setError(null);
 
     try {
-      setSettlement(
-        await apiClient.settlePayment({
-          ...request,
-          paymentAttemptId: currentVerification.paymentAttemptId
-        })
-      );
+      setSettlement(await apiClient.settlePayment(request));
     } catch (caught) {
       setSettlement(null);
       setError(normalizePlaygroundError(caught));
@@ -127,6 +146,19 @@ export function PaymentPlayground() {
       setBusy(null);
     }
   }
+
+  const verificationEvidence = verification?.extra?.lumenbazaar;
+  const settlementEvidence = settlement?.extra?.lumenbazaar;
+  const flowState: PaymentFlowState =
+    busy === "settle"
+      ? "submitted"
+      : settlement?.success
+        ? "confirmed"
+        : verification
+          ? mode === "simulation"
+            ? "simulation"
+            : "wallet-draft"
+          : "unknown";
 
   return (
     <>
@@ -226,6 +258,12 @@ export function PaymentPlayground() {
               <h2 className="text-lg font-semibold text-slate-950">Flow</h2>
             </CardHeader>
             <CardBody className="space-y-3">
+              <div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <span className="text-sm text-slate-600">Payment state</span>
+                <Badge tone={flowState === "confirmed" ? "success" : "neutral"}>
+                  {paymentFlowStateLabels[flowState]}
+                </Badge>
+              </div>
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                 <Button onClick={runSimulatedVerify} type="button" variant="secondary">
                   <ShieldCheck aria-hidden="true" className="h-4 w-4" />
@@ -257,10 +295,10 @@ export function PaymentPlayground() {
                 <ResultPanel
                   label="Verification"
                   rows={[
-                    ["Status", verification.status],
-                    ["Attempt", verification.paymentAttemptId],
-                    ["Hash", shortHash(verification.paymentHash)],
-                    ["Adapter", verification.adapter]
+                    ["Status", verification.isValid ? "verified" : "rejected"],
+                    ["Attempt", verificationEvidence?.paymentAttemptId ?? "Unavailable"],
+                    ["Hash", shortHash(verificationEvidence?.paymentHash)],
+                    ["Adapter", verificationEvidence?.adapter ?? "Unavailable"]
                   ]}
                   tone="success"
                 />
@@ -270,19 +308,19 @@ export function PaymentPlayground() {
                 <ResultPanel
                   label="Settlement"
                   rows={[
-                    ["Status", settlement.status],
-                    ["Receipt", settlement.receiptId],
-                    ["Ledger", String(settlement.ledger)],
-                    ["Hash", shortHash(settlement.transactionHash)]
+                    ["Status", settlement.success ? "confirmed" : "unknown"],
+                    ["Receipt", settlementEvidence?.receiptId ?? "Unavailable"],
+                    ["Ledger", String(settlementEvidence?.ledger ?? "Unavailable")],
+                    ["Hash", shortHash(settlement.transaction)]
                   ]}
                   tone="success"
                 />
               ) : null}
 
-              {settlement?.transactionHash ? (
+              {settlement?.transaction ? (
                 <a
                   className="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm hover:bg-slate-50"
-                  href={explorerTransactionUrl(settlement.network, settlement.transactionHash)}
+                  href={explorerTransactionUrl(settlement.network, settlement.transaction)}
                   rel="noreferrer"
                   target="_blank"
                 >
@@ -313,7 +351,10 @@ export function PaymentPlayground() {
               <pre className="max-h-[34rem] overflow-auto rounded-md bg-slate-950 p-4 text-xs text-slate-100">
                 {JSON.stringify(
                   redactSensitivePaymentData(
-                    paymentRequest ?? buildPlaygroundPaymentRequest(resource)
+                    paymentRequest ??
+                      buildPlaygroundPaymentRequest(resource, {
+                        paymentHash: "preview-not-submitted"
+                      })
                   ),
                   null,
                   2

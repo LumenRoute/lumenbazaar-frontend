@@ -7,13 +7,16 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { LoadingState } from "@/components/ui/surfaces";
+import { DataFreshnessBadge } from "@/components/ui/data-freshness-badge";
+import { ErrorState, LoadingState } from "@/components/ui/surfaces";
 import { queryKeys } from "@/services/api/query";
 import { loadOperatorSnapshot, statusTone, type OperatorHealthRow } from "@/services/operators";
+import { normalizeUiError } from "@/services/ui-state";
 
 export function OperatorHealthPage() {
   const {
     data: snapshot,
+    error,
     isLoading,
     refetch
   } = useQuery({
@@ -21,8 +24,17 @@ export function OperatorHealthPage() {
     queryKey: queryKeys.health
   });
 
-  if (isLoading || snapshot === undefined) {
+  if (isLoading) {
     return <LoadingState label="Loading dependency health" />;
+  }
+
+  if (snapshot === undefined) {
+    const state = normalizeUiError(error, {
+      code: "BACKEND_UNAVAILABLE",
+      description: "Dependency readiness could not be verified against the configured backend.",
+      title: "Dependency health unavailable"
+    });
+    return <ErrorState {...state} onRetry={() => void refetch()} />;
   }
 
   return (
@@ -40,12 +52,27 @@ export function OperatorHealthPage() {
 
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={snapshot.source === "api" ? "success" : "warning"}>
-            {snapshot.source === "api" ? "API data" : "Local demo data"}
+          <Badge
+            tone={
+              snapshot.source === "api"
+                ? "success"
+                : snapshot.source === "unavailable"
+                  ? "danger"
+                  : "warning"
+            }
+          >
+            {snapshot.source === "api"
+              ? "Live API data"
+              : snapshot.source === "demo"
+                ? "Explicit demo data"
+                : snapshot.source === "partial"
+                  ? "Partial API data"
+                  : "API unavailable"}
           </Badge>
+          <DataFreshnessBadge observedAt={snapshot.checkedAt} source={snapshot.source} />
           {snapshot.warnings.map((warning) => (
             <Badge key={warning} tone="neutral">
-              {warning} fallback
+              {warning} unavailable
             </Badge>
           ))}
         </div>

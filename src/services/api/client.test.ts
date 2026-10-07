@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { LumenBazaarApiClient } from "./client";
+import { assertBackendCompatibility, LumenBazaarApiClient } from "./client";
+import { readinessSchema, supportedSchema, versionSchema } from "./schemas";
 
 describe("LumenBazaarApiClient", () => {
   it("builds typed requests with correlation IDs", async () => {
@@ -17,7 +18,8 @@ describe("LumenBazaarApiClient", () => {
     );
     const client = new LumenBazaarApiClient({
       baseUrl: "https://api.example.test",
-      fetchImpl: fetchImpl as unknown as typeof fetch
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      validateCompatibility: false
     });
 
     const health = await client.getHealth();
@@ -46,7 +48,8 @@ describe("LumenBazaarApiClient", () => {
     );
     const client = new LumenBazaarApiClient({
       baseUrl: "https://api.example.test/",
-      fetchImpl: fetchImpl as unknown as typeof fetch
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      validateCompatibility: false
     });
 
     await client.searchResources({
@@ -69,6 +72,32 @@ describe("LumenBazaarApiClient", () => {
     expect(requestUrl.searchParams.get("type")).toBe("http");
   });
 
+  it("loads a seller resource collection from the scoped API route", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({
+        nextCursor: null,
+        resources: []
+      })
+    );
+    const client = new LumenBazaarApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      validateCompatibility: false
+    });
+
+    const page = await client.listSellerResources("seller/live", {
+      network: "stellar:testnet",
+      status: "active"
+    });
+    const calls = fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>;
+    const url = new URL(String(calls[0]?.[0]));
+
+    expect(url.pathname).toBe("/v1/sellers/seller%2Flive/resources");
+    expect(url.searchParams.get("network")).toBe("stellar:testnet");
+    expect(url.searchParams.get("status")).toBe("active");
+    expect(page.resources).toEqual([]);
+  });
+
   it("converts structured API failures into typed errors", async () => {
     const fetchImpl = vi.fn(async () =>
       Response.json(
@@ -85,7 +114,8 @@ describe("LumenBazaarApiClient", () => {
     );
     const client = new LumenBazaarApiClient({
       baseUrl: "https://api.example.test",
-      fetchImpl: fetchImpl as unknown as typeof fetch
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      validateCompatibility: false
     });
 
     await expect(client.getResource("missing")).rejects.toMatchObject({
@@ -93,6 +123,70 @@ describe("LumenBazaarApiClient", () => {
       requestId: "req_test",
       status: 404
     });
+  });
+
+  it("converts transport failures into an unavailable backend state", async () => {
+    const client = new LumenBazaarApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: (() => Promise.reject(new Error("offline"))) as typeof fetch,
+      validateCompatibility: false
+    });
+
+    await expect(client.getHealth()).rejects.toMatchObject({
+      code: "BACKEND_UNAVAILABLE",
+      status: 0
+    });
+  });
+
+  it("rejects response schema drift with a stable client error", async () => {
+    const client = new LumenBazaarApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: (async () => Response.json({ ok: "yes" })) as typeof fetch,
+      validateCompatibility: false
+    });
+
+    await expect(client.getHealth()).rejects.toMatchObject({
+      code: "INVALID_API_RESPONSE",
+      status: 200
+    });
+  });
+
+  it("rejects unsupported backend versions and capability combinations", () => {
+    expect(() =>
+      assertBackendCompatibility({
+        expectedNetwork: "stellar:testnet",
+        mode: "testnet",
+        readiness: validReadiness(),
+        supported: validSupported(),
+        version: versionSchema.parse({
+          environment: "testnet",
+          service: "lumenbazaar-backend",
+          version: "0.2.0"
+        })
+      })
+    ).toThrow("unsupported");
+
+    expect(() =>
+      assertBackendCompatibility({
+        expectedNetwork: "stellar:testnet",
+        mode: "testnet",
+        readiness: readinessSchema.parse({
+          ...validReadiness(),
+          capabilities: { exact: false, upto: false }
+        }),
+        supported: validSupported(),
+        version: validVersion()
+      })
+    ).toThrow("not ready");
+  });
+
+  it("rejects the previous v1 supported schema", () => {
+    expect(
+      supportedSchema.safeParse({
+        extensions: { bazaar: true },
+        schemes: [{ name: "exact", network: "stellar:testnet" }]
+      }).success
+    ).toBe(false);
   });
 
   it("wraps resource validation payloads as discovery metadata", async () => {
@@ -111,7 +205,8 @@ describe("LumenBazaarApiClient", () => {
     );
     const client = new LumenBazaarApiClient({
       baseUrl: "https://api.example.test",
-      fetchImpl: fetchImpl as unknown as typeof fetch
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      validateCompatibility: false
     });
 
     const result = await client.validateResource(resourcePayload());
@@ -162,48 +257,64 @@ describe("LumenBazaarApiClient", () => {
       .fn()
       .mockResolvedValueOnce(
         Response.json({
-          adapter: "@x402/stellar",
-          network: "stellar:testnet",
-          paymentAttemptId: "attempt_1",
-          paymentHash: "hash_1",
-          status: "verified"
+          extra: {
+            lumenbazaar: {
+              adapter: "@x402/stellar",
+              correlationId: "corr_1",
+              network: "stellar:testnet",
+              paymentAttemptId: "attempt_1",
+              paymentHash: "hash_1",
+              status: "verified"
+            }
+          },
+          isValid: true
         })
       )
       .mockResolvedValueOnce(
         Response.json({
-          ledger: 456,
+          amount: "500000",
+          extra: {
+            lumenbazaar: {
+              correlationId: "corr_1",
+              ledger: 456,
+              paymentAttemptId: "attempt_1",
+              receiptId: "receipt_1",
+              settlementId: "settlement_1",
+              status: "confirmed",
+              transactionHash: "tx_1"
+            }
+          },
           network: "stellar:testnet",
-          paymentAttemptId: "attempt_1",
-          receiptId: "receipt_1",
-          settlementId: "settlement_1",
-          status: "settled",
-          transactionHash: "tx_1"
+          success: true,
+          transaction: "tx_1"
         })
       );
     const client = new LumenBazaarApiClient({
       baseUrl: "https://api.example.test",
-      fetchImpl: fetchImpl as unknown as typeof fetch
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      validateCompatibility: false
     });
     const request = paymentPayload();
 
     await client.verifyPayment(request);
-    await client.settlePayment({ ...request, paymentAttemptId: "attempt_1" });
+    await client.settlePayment(request);
 
     const calls = fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>;
 
     expect(calls[0]?.[0]).toBe("https://api.example.test/v1/verify");
     expect(JSON.parse(String(calls[0]?.[1].body))).toMatchObject({
       paymentPayload: {
-        scheme: "exact"
+        accepted: {
+          scheme: "exact"
+        },
+        x402Version: 2
       },
       paymentRequirements: {
         scheme: "exact"
       }
     });
     expect(calls[1]?.[0]).toBe("https://api.example.test/v1/settle");
-    expect(JSON.parse(String(calls[1]?.[1].body))).toMatchObject({
-      paymentAttemptId: "attempt_1"
-    });
+    expect(JSON.parse(String(calls[1]?.[1].body))).toMatchObject({ x402Version: 2 });
   });
 
   it("reads latest conformance from the persisted run list", async () => {
@@ -240,7 +351,8 @@ describe("LumenBazaarApiClient", () => {
     );
     const client = new LumenBazaarApiClient({
       baseUrl: "https://api.example.test",
-      fetchImpl: fetchImpl as unknown as typeof fetch
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      validateCompatibility: false
     });
 
     const latest = await client.getLatestConformanceRun();
@@ -255,61 +367,49 @@ describe("LumenBazaarApiClient", () => {
   it("parses supported exact and upto schemes", async () => {
     const fetchImpl = vi.fn(async () =>
       Response.json({
-        extensions: {
-          bazaar: true,
-          upto: true,
-          uptoContracts: [
-            {
-              contractId: "CCAPPEDSESSION",
-              network: "stellar:testnet"
-            }
-          ]
-        },
-        schemes: [
+        extensions: ["bazaar"],
+        kinds: [
           {
-            assets: [
-              {
-                code: "USDC",
-                decimals: 7,
-                issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
-              }
-            ],
-            extensions: {
-              upto: false,
-              x402Version: "1"
+            extra: {
+              areFeesSponsored: true,
+              assets: [
+                {
+                  code: "USDC",
+                  contractId: "CASSET",
+                  decimals: 7,
+                  issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
+                }
+              ]
             },
-            name: "exact",
-            network: "stellar:testnet"
+            network: "stellar:testnet",
+            scheme: "exact",
+            x402Version: 2
           },
           {
-            assets: [
-              {
-                code: "USDC",
-                contractId: "CASSET",
-                decimals: 7,
-                issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
-              }
-            ],
-            extensions: {
+            extra: {
               contractId: "CCAPPEDSESSION",
-              sessionEndpoint: "/v1/payment-sessions",
-              x402Version: "1"
+              sessionEndpoint: "/v1/payment-sessions"
             },
-            name: "upto",
-            network: "stellar:testnet"
+            network: "stellar:testnet",
+            scheme: "upto",
+            x402Version: 2
           }
-        ]
+        ],
+        signers: {
+          "stellar:*": ["GFACILITATOR"]
+        }
       })
     );
     const client = new LumenBazaarApiClient({
       baseUrl: "https://api.example.test",
-      fetchImpl: fetchImpl as unknown as typeof fetch
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      validateCompatibility: false
     });
 
     const supported = await client.getSupported();
 
-    expect(supported.schemes.map((scheme) => scheme.name)).toEqual(["exact", "upto"]);
-    expect(supported.extensions.uptoContracts).toHaveLength(1);
+    expect(supported.kinds.map((kind) => kind.scheme)).toEqual(["exact", "upto"]);
+    expect(supported.extensions).toEqual(["bazaar"]);
   });
 });
 
@@ -338,30 +438,68 @@ function resourcePayload() {
 }
 
 function paymentPayload() {
-  return {
-    currentLedger: 1,
-    paymentPayload: {
-      amount: "0.05",
-      asset: {
-        code: "USDC",
-        issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
-      },
-      authorization: {
-        simulation: true
-      },
-      network: "stellar:testnet" as const,
-      payTo: "GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE",
-      scheme: "exact" as const
+  const requirements = {
+    amount: "500000",
+    asset: "CASSET",
+    extra: {
+      assetCode: "USDC"
     },
-    paymentRequirements: {
-      amount: "0.05",
-      asset: {
-        code: "USDC",
-        issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
-      },
-      network: "stellar:testnet" as const,
-      payTo: "GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE",
-      scheme: "exact" as const
-    }
+    maxTimeoutSeconds: 300,
+    network: "stellar:testnet" as const,
+    payTo: "GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE",
+    scheme: "exact" as const
   };
+
+  return {
+    paymentPayload: {
+      accepted: requirements,
+      payload: {
+        transaction: "AAAA"
+      },
+      x402Version: 2 as const
+    },
+    paymentRequirements: requirements,
+    x402Version: 2 as const
+  };
+}
+
+function validReadiness() {
+  const ready = { status: "ready" };
+  return readinessSchema.parse({
+    capabilities: { exact: true, upto: false },
+    checks: {
+      assets: ready,
+      database: ready,
+      horizon: ready,
+      migrations: ready,
+      redis: ready,
+      signer: ready,
+      stellarRpc: ready
+    },
+    environment: "testnet",
+    ok: true
+  });
+}
+
+function validSupported() {
+  return supportedSchema.parse({
+    extensions: ["bazaar"],
+    kinds: [
+      {
+        extra: { assets: [] },
+        network: "stellar:testnet",
+        scheme: "exact",
+        x402Version: 2
+      }
+    ],
+    signers: { "stellar:*": ["GFACILITATOR"] }
+  });
+}
+
+function validVersion() {
+  return versionSchema.parse({
+    environment: "testnet",
+    service: "lumenbazaar-backend",
+    version: "0.1.0"
+  });
 }

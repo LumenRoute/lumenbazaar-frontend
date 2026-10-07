@@ -2,4 +2,8 @@
 
 /src/components/wallet/ @Hallab7
 /src/services/payments.ts @Hallab7
+/src/services/x402/ @Hallab7
+/src/services/api/ @Hallab7
+/src/config/ @Hallab7
+/playwright.live.config.ts @Hallab7
 /.github/ @Hallab7

@@ -3,16 +3,20 @@ import type {
   ConformanceRun,
   Health,
   NetworksResponse,
-  SupportedPaymentSchemes
+  Readiness,
+  SupportedPaymentSchemes,
+  Version
 } from "@/services/api/schemas";
+import { isDemoMode, type RuntimeEnvironment } from "@/config/runtime";
 import {
   demoConformanceRun,
   demoHealthRows,
   demoOperatorMetrics,
   demoSupportedPaymentSchemes
 } from "@/fixtures/lumenbazaar";
+import { currentRuntimeMode } from "@/services/runtime-mode";
 
-export type OperatorHealthStatus = "operational" | "degraded" | "down";
+export type OperatorHealthStatus = "operational" | "degraded" | "down" | "unknown";
 
 export type OperatorHealthRow = {
   checkedAt: string;
@@ -22,55 +26,101 @@ export type OperatorHealthRow = {
 };
 
 export type OperatorSnapshot = {
-  conformance: ConformanceRun;
+  checkedAt: string;
+  conformance: ConformanceRun | null;
   healthRows: OperatorHealthRow[];
-  metrics: typeof demoOperatorMetrics;
+  metrics: {
+    queueDepth: Record<string, number | null>;
+    settlementLatencyP95Ms: number | null;
+    settlementSuccessRate: number | null;
+  };
   networks: NetworksResponse["networks"];
-  source: "api" | "demo";
+  source: "api" | "demo" | "partial" | "unavailable";
   supported: SupportedPaymentSchemes;
+  version: Version | null;
   warnings: string[];
 };
 
 type OperatorClient = Pick<
   LumenBazaarApiClient,
-  "getHealth" | "getLatestConformanceRun" | "getNetworks" | "getSupported"
+  | "getHealth"
+  | "getLatestConformanceRun"
+  | "getNetworks"
+  | "getReadiness"
+  | "getSupported"
+  | "getVersion"
 >;
 
 export async function loadOperatorSnapshot(
-  client: OperatorClient = apiClient
+  client: OperatorClient = apiClient,
+  mode: RuntimeEnvironment = currentRuntimeMode()
 ): Promise<OperatorSnapshot> {
-  const [healthResult, networksResult, supportedResult, conformanceResult] =
+  if (isDemoMode(mode)) {
+    const checkedAt = new Date().toISOString();
+    return {
+      checkedAt,
+      conformance: demoConformanceRun,
+      healthRows: demoOperatorHealthRows(),
+      metrics: demoOperatorMetrics,
+      networks: demoNetworks(),
+      source: "demo",
+      supported: demoSupportedPaymentSchemes,
+      version: {
+        commit: "demo-build",
+        environment: "demo",
+        service: "lumenbazaar-backend",
+        version: "0.1.0"
+      },
+      warnings: []
+    };
+  }
+
+  const checkedAt = new Date().toISOString();
+  const [health, readiness, networksResponse, supported, conformance, version] =
     await Promise.allSettled([
       client.getHealth(),
+      client.getReadiness(),
       client.getNetworks(),
       client.getSupported(),
-      client.getLatestConformanceRun()
+      client.getLatestConformanceRun(),
+      client.getVersion()
     ]);
-  const warnings = failedLabels({
-    conformance: conformanceResult,
-    health: healthResult,
-    networks: networksResult,
-    supported: supportedResult
-  });
-  const networks =
-    networksResult.status === "fulfilled" ? networksResult.value.networks : demoNetworks();
-  const supported =
-    supportedResult.status === "fulfilled" ? supportedResult.value : demoSupportedPaymentSchemes;
-  const conformance =
-    conformanceResult.status === "fulfilled" ? conformanceResult.value : demoConformanceRun;
-  const healthRows =
-    healthResult.status === "fulfilled"
-      ? liveHealthRows(healthResult.value, { networks })
-      : demoOperatorHealthRows();
+  const networks = networksResponse.status === "fulfilled" ? networksResponse.value.networks : [];
+  const results = {
+    health,
+    readiness,
+    networks: networksResponse,
+    supported,
+    conformance,
+    version
+  };
+  const unavailable = Object.entries(results)
+    .filter(([, result]) => result.status === "rejected")
+    .map(([name]) => name);
+  const successful = Object.keys(results).length - unavailable.length;
 
   return {
-    conformance,
-    healthRows,
-    metrics: demoOperatorMetrics,
+    checkedAt,
+    conformance: conformance.status === "fulfilled" ? conformance.value : null,
+    healthRows: liveHealthRows(
+      health.status === "fulfilled" ? health.value : undefined,
+      readiness.status === "fulfilled" ? readiness.value : undefined,
+      { networks },
+      checkedAt
+    ),
+    metrics: {
+      queueDepth: { "settlement-confirmation": null },
+      settlementLatencyP95Ms: null,
+      settlementSuccessRate: null
+    },
     networks,
-    source: warnings.length === 4 ? "demo" : "api",
-    supported,
-    warnings
+    source: successful === 0 ? "unavailable" : unavailable.length === 0 ? "api" : "partial",
+    supported:
+      supported.status === "fulfilled"
+        ? supported.value
+        : { extensions: [], kinds: [], signers: {} },
+    version: version.status === "fulfilled" ? version.value : null,
+    warnings: [...unavailable, "metrics"]
   };
 }
 
@@ -104,82 +154,85 @@ export function statusTone(status: OperatorHealthStatus | ConformanceRun["status
     return "warning";
   }
 
+  if (status === "unknown") return "neutral";
+
   return "danger";
 }
 
-function failedLabels(
-  results: Record<string, PromiseSettledResult<unknown>>
-): OperatorSnapshot["warnings"] {
-  return Object.entries(results)
-    .filter(([, result]) => result.status === "rejected")
-    .map(([label]) => label);
-}
-
-function liveHealthRows(health: Health, networks: NetworksResponse): OperatorHealthRow[] {
-  const checkedAt = new Date().toISOString();
-  const apiStatus: OperatorHealthStatus = health.ok ? "operational" : "down";
-  const redisStatus = dependencyStatus(health.dependencies.redis);
-  const postgresStatus = dependencyStatus(health.dependencies.database);
+function liveHealthRows(
+  health: Health | undefined,
+  readiness: Readiness | undefined,
+  networks: NetworksResponse,
+  checkedAt: string
+): OperatorHealthRow[] {
+  const apiStatus: OperatorHealthStatus =
+    health === undefined ? "unknown" : health.ok ? "operational" : "down";
   const configuredNetworks = networks.networks.length;
 
   return [
     {
       checkedAt,
-      detail: `${health.service} responded for ${health.app}.`,
+      detail:
+        health === undefined
+          ? "API health could not be verified."
+          : `${health.service} responded for ${health.app}.`,
       name: "API",
       status: apiStatus
     },
     {
       checkedAt,
-      detail: "Worker queue telemetry is read from backend metrics when available.",
+      detail: "Worker queue telemetry is unavailable through the JSON API.",
       name: "Worker",
-      status: "operational"
+      status: "unknown"
     },
     {
       checkedAt,
-      detail: "Search index is reachable through the discovery API.",
+      detail:
+        readiness === undefined
+          ? "Search readiness could not be verified."
+          : "Search follows backend readiness.",
       name: "Search",
-      status: "operational"
+      status: readiness === undefined ? "unknown" : readiness.ok ? "operational" : "down"
     },
     {
       checkedAt,
-      detail: `Redis dependency reported ${health.dependencies.redis}.`,
+      detail: readiness?.checks.redis.detail ?? "Redis readiness is unavailable.",
       name: "Redis",
-      status: redisStatus
+      status: readiness === undefined ? "unknown" : readinessStatus(readiness.checks.redis.status)
     },
     {
       checkedAt,
-      detail: `Postgres dependency reported ${health.dependencies.database}.`,
+      detail: readiness?.checks.database.detail ?? "Database readiness is unavailable.",
       name: "Postgres",
-      status: postgresStatus
+      status:
+        readiness === undefined ? "unknown" : readinessStatus(readiness.checks.database.status)
     },
     {
       checkedAt,
-      detail: `${configuredNetworks} configured Stellar RPC endpoint(s).`,
+      detail:
+        readiness?.checks.stellarRpc.detail ??
+        `${configuredNetworks} configured Stellar RPC endpoint(s).`,
       name: "RPC",
-      status: configuredNetworks > 0 ? "operational" : "degraded"
+      status:
+        readiness === undefined ? "unknown" : readinessStatus(readiness.checks.stellarRpc.status)
     },
     {
       checkedAt,
-      detail: `${configuredNetworks} configured Stellar Horizon endpoint(s).`,
+      detail:
+        readiness?.checks.horizon.detail ??
+        `${configuredNetworks} configured Stellar Horizon endpoint(s).`,
       name: "Horizon",
-      status: configuredNetworks > 0 ? "operational" : "degraded"
+      status: readiness === undefined ? "unknown" : readinessStatus(readiness.checks.horizon.status)
     }
   ];
 }
 
-function dependencyStatus(value: string): OperatorHealthStatus {
-  const normalized = value.toLowerCase();
-
-  if (normalized.includes("down") || normalized.includes("failed")) {
-    return "down";
-  }
-
-  if (normalized.includes("missing") || normalized.includes("unconfigured")) {
-    return "degraded";
-  }
-
-  return "operational";
+function readinessStatus(
+  status: Readiness["checks"][keyof Readiness["checks"]]["status"]
+): OperatorHealthStatus {
+  if (status === "ready") return "operational";
+  if (status === "not_required") return "degraded";
+  return "down";
 }
 
 function demoOperatorHealthRows(): OperatorHealthRow[] {
@@ -191,25 +244,24 @@ function demoOperatorHealthRows(): OperatorHealthRow[] {
 }
 
 function demoNetworks(): NetworksResponse["networks"] {
-  return demoSupportedPaymentSchemes.schemes.map((scheme) => ({
-    assets: scheme.assets.map((asset) => ({
+  return demoSupportedPaymentSchemes.kinds.map((kind) => ({
+    assets: (kind.extra?.assets ?? []).map((asset) => ({
       code: asset.code,
       decimals: asset.decimals,
       issuer: asset.issuer
     })),
-    displayName:
-      scheme.network === "stellar:testnet" ? "Stellar Testnet" : "Stellar Public Network",
+    displayName: kind.network === "stellar:testnet" ? "Stellar Testnet" : "Stellar Public Network",
     horizonUrl:
-      scheme.network === "stellar:testnet"
+      kind.network === "stellar:testnet"
         ? "https://horizon-testnet.stellar.org"
         : "https://horizon.stellar.org",
-    id: scheme.network,
+    id: kind.network,
     passphrase:
-      scheme.network === "stellar:testnet"
+      kind.network === "stellar:testnet"
         ? "Test SDF Network ; September 2015"
         : "Public Global Stellar Network ; September 2015",
     rpcUrl:
-      scheme.network === "stellar:testnet"
+      kind.network === "stellar:testnet"
         ? "https://soroban-testnet.stellar.org"
         : "https://mainnet.sorobanrpc.com"
   }));

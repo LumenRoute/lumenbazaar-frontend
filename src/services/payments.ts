@@ -8,6 +8,7 @@ import {
   type DemoSettlement
 } from "@/fixtures/lumenbazaar";
 import { getNetworkConfig, type NetworkId } from "@/config/networks";
+import { apiClient, type LumenBazaarApiClient } from "@/services/api/client";
 import type {
   Receipt,
   Resource,
@@ -15,6 +16,8 @@ import type {
   ResourceType,
   Seller
 } from "@/services/api/schemas";
+import type { RuntimeEnvironment } from "@/config/runtime";
+import { currentRuntimeMode, requireDemoMode } from "@/services/runtime-mode";
 
 export type PaymentActivityStatus = DemoPaymentAttempt["status"] | DemoSettlement["status"];
 
@@ -43,7 +46,46 @@ export type SellerResourceFilters = {
   type?: ResourceType;
 };
 
-export function loadSellerResources(filters: SellerResourceFilters = {}) {
+export type SellerResourceSnapshot = {
+  fetchedAt: string;
+  resources: Resource[];
+  source: "api" | "demo";
+};
+
+type SellerResourceClient = Pick<LumenBazaarApiClient, "listSellerResources">;
+
+export async function loadSellerResourceSnapshot(
+  filters: SellerResourceFilters = {},
+  client: SellerResourceClient = apiClient,
+  mode: RuntimeEnvironment = currentRuntimeMode()
+): Promise<SellerResourceSnapshot> {
+  if (mode === "demo") {
+    return {
+      fetchedAt: new Date().toISOString(),
+      resources: loadSellerResources(filters, mode),
+      source: "demo"
+    };
+  }
+
+  const sellerId = filters.sellerId ?? "seller_atlas_weather";
+  const page = await client.listSellerResources(sellerId, {
+    asset: filters.asset,
+    network: filters.network,
+    status: filters.status,
+    type: filters.type
+  });
+  return {
+    fetchedAt: new Date().toISOString(),
+    resources: page.resources,
+    source: "api"
+  };
+}
+
+export function loadSellerResources(
+  filters: SellerResourceFilters = {},
+  mode: RuntimeEnvironment = currentRuntimeMode()
+) {
+  requireDemoMode(mode);
   const sellerId = filters.sellerId ?? "seller_atlas_weather";
 
   return demoPaymentResources().filter(
@@ -57,7 +99,11 @@ export function loadSellerResources(filters: SellerResourceFilters = {}) {
   );
 }
 
-export function loadPaymentActivity(filters: PaymentActivityFilters = {}): PaymentActivity[] {
+export function loadPaymentActivity(
+  filters: PaymentActivityFilters = {},
+  mode: RuntimeEnvironment = currentRuntimeMode()
+): PaymentActivity[] {
+  requireDemoMode(mode);
   return demoPaymentAttempts
     .map((attempt) => ({
       attempt,
@@ -84,8 +130,11 @@ export function loadPaymentActivity(filters: PaymentActivityFilters = {}): Payme
     .sort((left, right) => right.attempt.createdAt.localeCompare(left.attempt.createdAt));
 }
 
-export function loadSellerPaymentActivity(sellerId = "seller_atlas_weather") {
-  return loadPaymentActivity({ sellerId });
+export function loadSellerPaymentActivity(
+  sellerId = "seller_atlas_weather",
+  mode: RuntimeEnvironment = currentRuntimeMode()
+) {
+  return loadPaymentActivity({ sellerId }, mode);
 }
 
 export function paymentActivityStatus(activity: PaymentActivity) {

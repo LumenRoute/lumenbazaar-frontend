@@ -31,10 +31,17 @@ function toFrameworkRoute(routeTemplate: string) {
   return routeTemplate.replace(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g, ":$1");
 }
 
+function toAtomicAmount(amount: string, decimals = 7) {
+  const [whole = "0", fraction = ""] = amount.split(".");
+  const atomic = `${whole}${fraction.padEnd(decimals, "0").slice(0, decimals)}`.replace(/^0+/, "");
+  return atomic.length === 0 ? "1" : atomic;
+}
+
 export function generateExpressSnippet(draft: ResourceDraft): string {
   const resourceMetadata = getResourceMetadata(draft);
   const routeTemplate = draft.routeTemplate || "/api/resource";
   const frameworkRoute = toFrameworkRoute(routeTemplate);
+  const atomicAmount = toAtomicAmount(draft.amount || "0.05");
 
   return `import express from "express";
 import { createExpressPaymentMiddleware, paymentRequirement } from "@lumenbazaar/seller-sdk";
@@ -46,10 +53,12 @@ const resourceMetadata = ${resourceMetadata};
 
 const requirement = paymentRequirement({
   network: "${draft.network || "stellar:testnet"}",
+  assetContractId: "REPLACE_WITH_SEP41_CONTRACT_ID",
   assetCode: "${draft.assetCode || "USDC"}",
   assetIssuer: "${draft.assetIssuer || ""}",
-  amount: "${draft.amount || "0.05"}",
-  payTo: "${draft.payTo || ""}"
+  amount: "${atomicAmount}",
+  payTo: "${draft.payTo || ""}",
+  maxTimeoutSeconds: 300
 });
 
 // Apply payment requirement middleware
@@ -77,6 +86,7 @@ export function generateFastifySnippet(draft: ResourceDraft): string {
   const resourceMetadata = getResourceMetadata(draft);
   const routeTemplate = draft.routeTemplate || "/api/resource";
   const frameworkRoute = toFrameworkRoute(routeTemplate);
+  const atomicAmount = toAtomicAmount(draft.amount || "0.05");
 
   return `import Fastify from "fastify";
 import { createFastifyPaymentMiddleware, paymentRequirement } from "@lumenbazaar/seller-sdk";
@@ -88,10 +98,12 @@ const resourceMetadata = ${resourceMetadata};
 
 const requirement = paymentRequirement({
   network: "${draft.network || "stellar:testnet"}",
+  assetContractId: "REPLACE_WITH_SEP41_CONTRACT_ID",
   assetCode: "${draft.assetCode || "USDC"}",
   assetIssuer: "${draft.assetIssuer || ""}",
-  amount: "${draft.amount || "0.05"}",
-  payTo: "${draft.payTo || ""}"
+  amount: "${atomicAmount}",
+  payTo: "${draft.payTo || ""}",
+  maxTimeoutSeconds: 300
 });
 
 await fastify.register(createFastifyPaymentMiddleware(requirement));
@@ -122,6 +134,7 @@ console.log("Server running on http://localhost:3000");`;
 
 export function generateNextJsSnippet(draft: ResourceDraft): string {
   const resourceMetadata = getResourceMetadata(draft);
+  const atomicAmount = toAtomicAmount(draft.amount || "0.05");
 
   return `import { NextRequest, NextResponse } from "next/server";
 import { createNextPaymentResponse, paymentRequirement } from "@lumenbazaar/seller-sdk";
@@ -131,20 +144,25 @@ const resourceMetadata = ${resourceMetadata};
 
 const requirement = paymentRequirement({
   network: "${draft.network || "stellar:testnet"}",
+  assetContractId: "REPLACE_WITH_SEP41_CONTRACT_ID",
   assetCode: "${draft.assetCode || "USDC"}",
   assetIssuer: "${draft.assetIssuer || ""}",
-  amount: "${draft.amount || "0.05"}",
-  payTo: "${draft.payTo || ""}"
+  amount: "${atomicAmount}",
+  payTo: "${draft.payTo || ""}",
+  maxTimeoutSeconds: 300
 });
 
 // Export as API route handler
 export async function GET(request: NextRequest) {
   try {
-    if (!request.headers.get("x-payment-required")) {
-      return createNextPaymentResponse(requirement);
+    if (!request.headers.get("PAYMENT-SIGNATURE")) {
+      return createNextPaymentResponse(requirement, {
+        url: "${draft.url || "https://seller.example/resource"}",
+        description: ${JSON.stringify(draft.description || "Paid resource")}
+      });
     }
 
-    // Payment verified - return resource
+    // Verify PAYMENT-SIGNATURE with the facilitator before returning paid data.
     return NextResponse.json({
       success: true,
       data: {

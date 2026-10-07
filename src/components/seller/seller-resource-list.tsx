@@ -1,18 +1,21 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { Ban, Eye, Pencil, RotateCcw } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/surfaces";
-import { findDemoSeller } from "@/fixtures/lumenbazaar";
+import { DataFreshnessBadge } from "@/components/ui/data-freshness-badge";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/surfaces";
+import { isDemoMode, loadRuntimeConfig } from "@/config/runtime";
 import type { Resource, ResourceStatus } from "@/services/api/schemas";
-import { formatPaymentAmount, loadSellerResources, shortHash } from "@/services/payments";
-import { emptyStateForCollection } from "@/services/ui-state";
+import { queryKeys } from "@/services/api/query";
+import { formatPaymentAmount, loadSellerResourceSnapshot, shortHash } from "@/services/payments";
+import { emptyStateForCollection, normalizeUiError } from "@/services/ui-state";
 
 const statusOptions: Array<{ label: string; value: ResourceStatus | "all" }> = [
   { label: "All", value: "all" },
@@ -22,18 +25,21 @@ const statusOptions: Array<{ label: string; value: ResourceStatus | "all" }> = [
 ];
 
 export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sellerId?: string }) {
+  const mode = loadRuntimeConfig().environment;
+  const demo = isDemoMode(mode);
   const [status, setStatus] = useState<ResourceStatus | "all">("all");
   const [disabledIds, setDisabledIds] = useState<Set<string>>(new Set());
-  const seller = findDemoSeller(sellerId);
   const emptyState = emptyStateForCollection("resources");
-  const resources = useMemo(
-    () =>
-      loadSellerResources({
-        sellerId,
-        ...(status === "all" ? {} : { status })
-      }),
-    [sellerId, status]
-  ).map((resource) =>
+  const { data, error, isLoading, refetch } = useQuery({
+    queryFn: () =>
+      loadSellerResourceSnapshot(
+        { sellerId, ...(status === "all" ? {} : { status }) },
+        undefined,
+        mode
+      ),
+    queryKey: queryKeys.resources({ mode, sellerId, status })
+  });
+  const resources = (data?.resources ?? []).map((resource) =>
     disabledIds.has(resource.id)
       ? {
           ...resource,
@@ -41,6 +47,8 @@ export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sell
         }
       : resource
   );
+
+  if (isLoading) return <LoadingState label="Loading seller resources" />;
 
   return (
     <>
@@ -58,72 +66,94 @@ export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sell
       />
 
       <div className="space-y-4">
-        <Card>
-          <CardBody className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-950">
-                {seller?.displayName ?? "Current seller"}
-              </p>
-              <p className="mt-1 break-all text-xs text-slate-600">{seller?.walletAddress}</p>
-            </div>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter resource status">
-              {statusOptions.map((option) => (
-                <Button
-                  key={option.value}
-                  className="min-w-20"
-                  onClick={() => setStatus(option.value)}
-                  type="button"
-                  variant={status === option.value ? "primary" : "secondary"}
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-          </CardBody>
-        </Card>
-
-        {resources.length === 0 ? (
-          <EmptyState title={emptyState.title} description={emptyState.description} />
-        ) : (
+        {data === undefined ? (
+          <ErrorState
+            {...normalizeUiError(error, {
+              code: "BACKEND_UNAVAILABLE",
+              description: "Seller resources could not be verified against the configured backend.",
+              title: "Seller resources unavailable"
+            })}
+            onRetry={() => void refetch()}
+          />
+        ) : null}
+        {data !== undefined ? (
           <Card>
-            <CardHeader>
-              <h2 className="text-lg font-semibold text-slate-950">Resource inventory</h2>
-            </CardHeader>
-            <CardBody className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">Resource</th>
-                    <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 font-medium">Network</th>
-                    <th className="px-3 py-2 font-medium">Price</th>
-                    <th className="px-3 py-2 font-medium">Last indexed</th>
-                    <th className="px-3 py-2 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {resources.map((resource) => (
-                    <ResourceRow
-                      disabled={disabledIds.has(resource.id)}
-                      key={resource.id}
-                      onDisable={() =>
-                        setDisabledIds((current) => new Set([...current, resource.id]))
-                      }
-                      onRestore={() =>
-                        setDisabledIds((current) => {
-                          const next = new Set(current);
-                          next.delete(resource.id);
-                          return next;
-                        })
-                      }
-                      resource={resource}
-                    />
-                  ))}
-                </tbody>
-              </table>
+            <CardBody className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="break-all text-sm font-medium text-slate-950">{sellerId}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Badge tone={data.source === "api" ? "success" : "warning"}>
+                    {data.source === "api" ? "Live API data" : "Explicit demo data"}
+                  </Badge>
+                  <DataFreshnessBadge observedAt={data.fetchedAt} source={data.source} />
+                </div>
+              </div>
+              <div
+                className="flex flex-wrap gap-2"
+                role="group"
+                aria-label="Filter resource status"
+              >
+                {statusOptions.map((option) => (
+                  <Button
+                    key={option.value}
+                    className="min-w-20"
+                    onClick={() => setStatus(option.value)}
+                    type="button"
+                    variant={status === option.value ? "primary" : "secondary"}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
             </CardBody>
           </Card>
-        )}
+        ) : null}
+
+        {data !== undefined ? (
+          resources.length === 0 ? (
+            <EmptyState title={emptyState.title} description={emptyState.description} />
+          ) : (
+            <Card>
+              <CardHeader>
+                <h2 className="text-lg font-semibold text-slate-950">Resource inventory</h2>
+              </CardHeader>
+              <CardBody className="overflow-x-auto">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead className="text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Resource</th>
+                      <th className="px-3 py-2 font-medium">Status</th>
+                      <th className="px-3 py-2 font-medium">Network</th>
+                      <th className="px-3 py-2 font-medium">Price</th>
+                      <th className="px-3 py-2 font-medium">Last indexed</th>
+                      <th className="px-3 py-2 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {resources.map((resource) => (
+                      <ResourceRow
+                        disabled={disabledIds.has(resource.id)}
+                        editable={demo}
+                        key={resource.id}
+                        onDisable={() =>
+                          setDisabledIds((current) => new Set([...current, resource.id]))
+                        }
+                        onRestore={() =>
+                          setDisabledIds((current) => {
+                            const next = new Set(current);
+                            next.delete(resource.id);
+                            return next;
+                          })
+                        }
+                        resource={resource}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </CardBody>
+            </Card>
+          )
+        ) : null}
       </div>
     </>
   );
@@ -131,11 +161,13 @@ export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sell
 
 function ResourceRow({
   disabled,
+  editable,
   onDisable,
   onRestore,
   resource
 }: {
   disabled: boolean;
+  editable: boolean;
   onDisable: () => void;
   onRestore: () => void;
   resource: Resource;
@@ -174,37 +206,40 @@ function ResourceRow({
           >
             <Eye aria-hidden="true" className="h-4 w-4" />
           </Link>
-          <Link
-            aria-label={`Edit ${resource.name}`}
-            className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-slate-700 hover:bg-slate-50"
-            href={`/seller/new-resource?resourceId=${resource.id}`}
-            title="Edit resource"
-          >
-            <Pencil aria-hidden="true" className="h-4 w-4" />
-          </Link>
-          {disabled ? (
-            <Button
-              aria-label={`Restore ${resource.name}`}
-              className="min-h-9 px-2"
-              onClick={onRestore}
-              title="Restore resource"
-              type="button"
-              variant="secondary"
+          {editable ? (
+            <Link
+              aria-label={`Edit ${resource.name}`}
+              className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-slate-700 hover:bg-slate-50"
+              href={`/seller/new-resource?resourceId=${resource.id}`}
+              title="Edit resource"
             >
-              <RotateCcw aria-hidden="true" className="h-4 w-4" />
-            </Button>
-          ) : (
-            <Button
-              aria-label={`Disable ${resource.name}`}
-              className="min-h-9 px-2"
-              onClick={onDisable}
-              title="Disable resource"
-              type="button"
-              variant="danger"
-            >
-              <Ban aria-hidden="true" className="h-4 w-4" />
-            </Button>
-          )}
+              <Pencil aria-hidden="true" className="h-4 w-4" />
+            </Link>
+          ) : null}
+          {editable &&
+            (disabled ? (
+              <Button
+                aria-label={`Restore ${resource.name}`}
+                className="min-h-9 px-2"
+                onClick={onRestore}
+                title="Restore resource"
+                type="button"
+                variant="secondary"
+              >
+                <RotateCcw aria-hidden="true" className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                aria-label={`Disable ${resource.name}`}
+                className="min-h-9 px-2"
+                onClick={onDisable}
+                title="Disable resource"
+                type="button"
+                variant="danger"
+              >
+                <Ban aria-hidden="true" className="h-4 w-4" />
+              </Button>
+            ))}
         </div>
       </td>
     </tr>

@@ -1,11 +1,13 @@
 import { apiClient, type LumenBazaarApiClient } from "@/services/api/client";
-import type { PaymentRequirement, Receipt, Resource, Seller } from "@/services/api/schemas";
+import type { Receipt, Resource, ResourcePaymentSummary, Seller } from "@/services/api/schemas";
+import { isDemoMode, type RuntimeEnvironment } from "@/config/runtime";
 
 import { demoReceipts, findDemoResource, findDemoSeller } from "@/fixtures/lumenbazaar";
+import { currentRuntimeMode } from "@/services/runtime-mode";
 
 export type ResourceDetailSnapshot = {
   receipts: Receipt[];
-  requirement: PaymentRequirement;
+  requirement: ResourcePaymentSummary;
   resource: Resource;
   seller?: Seller;
   source: "api" | "demo";
@@ -15,23 +17,13 @@ type ResourceDetailClient = Pick<LumenBazaarApiClient, "getResource">;
 
 export async function loadResourceDetail(
   resourceId: string,
-  client: ResourceDetailClient = apiClient
+  client: ResourceDetailClient = apiClient,
+  mode: RuntimeEnvironment = currentRuntimeMode()
 ): Promise<ResourceDetailSnapshot> {
-  try {
-    const resource = await client.getResource(resourceId);
-
-    return {
-      receipts: [],
-      requirement: buildPaymentRequirement(resource),
-      resource,
-      source: "api"
-    };
-  } catch {
+  if (isDemoMode(mode)) {
     const resource = findDemoResource(resourceId);
 
-    if (resource === undefined) {
-      throw new Error("RESOURCE_NOT_FOUND");
-    }
+    if (resource === undefined) throw new Error("RESOURCE_NOT_FOUND");
 
     return {
       receipts: demoReceipts.filter((receipt) => receipt.resourceId === resourceId),
@@ -41,19 +33,25 @@ export async function loadResourceDetail(
       source: "demo"
     };
   }
+
+  const resource = await client.getResource(resourceId);
+
+  return {
+    receipts: [],
+    requirement: buildPaymentRequirement(resource),
+    resource,
+    source: "api"
+  };
 }
 
-export function buildPaymentRequirement(resource: Resource): PaymentRequirement {
+export function buildPaymentRequirement(resource: Resource): ResourcePaymentSummary {
   return {
     amount: resource.amount,
     assetCode: resource.assetCode,
     assetIssuer: resource.assetIssuer,
-    expiresAtLedger: null,
     extensions: resource.extensions,
     network: resource.network,
     payTo: resource.payTo,
-    resourceId: resource.id,
-    scheme: "exact",
-    x402Version: "1"
+    resourceId: resource.id
   };
 }

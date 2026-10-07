@@ -5,6 +5,7 @@ import {
   formatPaymentAmount,
   loadPaymentActivity,
   loadSellerPaymentActivity,
+  loadSellerResourceSnapshot,
   loadSellerResources,
   paymentActivityStatus,
   shortHash
@@ -12,19 +13,24 @@ import {
 
 describe("payment activity services", () => {
   it("loads seller resources with filters", () => {
-    expect(loadSellerResources({ sellerId: "seller_atlas_weather" })).toHaveLength(1);
+    expect(loadSellerResources({ sellerId: "seller_atlas_weather" }, "demo")).toHaveLength(1);
     expect(
-      loadSellerResources({
-        sellerId: "seller_atlas_weather",
-        status: "active",
-        type: "http"
-      })[0]?.name
+      loadSellerResources(
+        {
+          sellerId: "seller_atlas_weather",
+          status: "active",
+          type: "http"
+        },
+        "demo"
+      )[0]?.name
     ).toBe("Paid Weather API");
-    expect(loadSellerResources({ sellerId: "seller_atlas_weather", type: "mcp" })).toHaveLength(0);
+    expect(
+      loadSellerResources({ sellerId: "seller_atlas_weather", type: "mcp" }, "demo")
+    ).toHaveLength(0);
   });
 
   it("joins attempts with resources, receipts, and settlements", () => {
-    const activity = loadSellerPaymentActivity("seller_atlas_weather");
+    const activity = loadSellerPaymentActivity("seller_atlas_weather", "demo");
 
     expect(activity).toHaveLength(2);
     expect(activity.some((item) => item.receipt?.id === "receipt_weather_001")).toBe(true);
@@ -33,12 +39,55 @@ describe("payment activity services", () => {
   });
 
   it("filters transaction activity by status and network", () => {
-    expect(loadPaymentActivity({ network: "stellar:testnet", status: "verified" })).toHaveLength(1);
-    expect(loadPaymentActivity({ asset: "USDC", resourceType: "mcp" })[0]?.resource?.type).toBe(
-      "mcp"
+    expect(
+      loadPaymentActivity({ network: "stellar:testnet", status: "verified" }, "demo")
+    ).toHaveLength(1);
+    expect(
+      loadPaymentActivity({ asset: "USDC", resourceType: "mcp" }, "demo")[0]?.resource?.type
+    ).toBe("mcp");
+    expect(loadPaymentActivity({ date: "2026-09-02" }, "demo")).toHaveLength(3);
+    expect(loadPaymentActivity({ date: "2026-09-03" }, "demo")).toHaveLength(0);
+  });
+
+  it("rejects fixture activity outside demo mode", () => {
+    expect(() => loadPaymentActivity({}, "local")).toThrow("Bundled fixtures");
+  });
+
+  it("uses the seller resource API in live mode and preserves an empty result", async () => {
+    const client = {
+      listSellerResources: vi.fn(async () => ({ nextCursor: null, resources: [] }))
+    };
+
+    const snapshot = await loadSellerResourceSnapshot(
+      { sellerId: "seller_live", status: "active" },
+      client,
+      "testnet"
     );
-    expect(loadPaymentActivity({ date: "2026-09-02" })).toHaveLength(3);
-    expect(loadPaymentActivity({ date: "2026-09-03" })).toHaveLength(0);
+
+    expect(client.listSellerResources).toHaveBeenCalledWith("seller_live", {
+      asset: undefined,
+      network: undefined,
+      status: "active",
+      type: undefined
+    });
+    expect(snapshot).toMatchObject({ resources: [], source: "api" });
+    expect(snapshot.fetchedAt).toEqual(expect.any(String));
+  });
+
+  it("loads seller resource fixtures only in explicit demo mode", async () => {
+    const client = {
+      listSellerResources: vi.fn(async () => ({ nextCursor: null, resources: [] }))
+    };
+
+    const snapshot = await loadSellerResourceSnapshot(
+      { sellerId: "seller_atlas_weather" },
+      client,
+      "demo"
+    );
+
+    expect(client.listSellerResources).not.toHaveBeenCalled();
+    expect(snapshot.source).toBe("demo");
+    expect(snapshot.resources).toHaveLength(1);
   });
 
   it("formats payment amounts and transaction links", () => {

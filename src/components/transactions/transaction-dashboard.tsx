@@ -8,9 +8,9 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/surfaces";
-import { demoSellers } from "@/fixtures/lumenbazaar";
+import { EmptyState, ErrorState } from "@/components/ui/surfaces";
 import type { NetworkId } from "@/config/networks";
+import { isDemoMode, loadRuntimeConfig } from "@/config/runtime";
 import {
   explorerTransactionUrl,
   formatPaymentAmount,
@@ -31,28 +31,66 @@ const allStatuses: Array<PaymentActivityStatus | "all"> = [
 ];
 
 export function TransactionDashboard() {
+  const mode = loadRuntimeConfig().environment;
+  const demo = isDemoMode(mode);
   const [network, setNetwork] = useState<NetworkId | "all">("all");
   const [status, setStatus] = useState<PaymentActivityStatus | "all">("all");
   const [asset, setAsset] = useState("all");
   const [sellerId, setSellerId] = useState("all");
   const [date, setDate] = useState("");
+  const unfilteredActivity = useMemo(
+    () => (demo ? loadPaymentActivity({}, mode) : []),
+    [demo, mode]
+  );
   const activity = useMemo(
     () =>
-      loadPaymentActivity({
-        ...(asset === "all" ? {} : { asset }),
-        ...(date === "" ? {} : { date }),
-        ...(network === "all" ? {} : { network }),
-        ...(sellerId === "all" ? {} : { sellerId }),
-        ...(status === "all" ? {} : { status })
-      }),
-    [asset, date, network, sellerId, status]
+      demo
+        ? loadPaymentActivity(
+            {
+              ...(asset === "all" ? {} : { asset }),
+              ...(date === "" ? {} : { date }),
+              ...(network === "all" ? {} : { network }),
+              ...(sellerId === "all" ? {} : { sellerId }),
+              ...(status === "all" ? {} : { status })
+            },
+            mode
+          )
+        : [],
+    [asset, date, demo, mode, network, sellerId, status]
   );
   const assets = useMemo(
-    () => [...new Set(loadPaymentActivity().map((item) => item.attempt.assetCode))],
-    []
+    () => [...new Set(unfilteredActivity.map((item) => item.attempt.assetCode))],
+    [unfilteredActivity]
   );
+  const sellers = useMemo(
+    () => [
+      ...new Map(
+        unfilteredActivity.flatMap((item) =>
+          item.seller === undefined ? [] : [[item.seller.id, item.seller] as const]
+        )
+      ).values()
+    ],
+    [unfilteredActivity]
+  );
+  const loadedAt = unfilteredActivity[0]?.attempt.createdAt;
   const hasFilters =
     network !== "all" || status !== "all" || asset !== "all" || sellerId !== "all" || date !== "";
+
+  if (!demo) {
+    return (
+      <>
+        <PageHeader
+          description="Inspect payment attempts, settlements, failure codes, receipts, and Stellar transaction evidence."
+          title="Transactions"
+        />
+        <ErrorState
+          code="UNSUPPORTED_CAPABILITY"
+          description="A payment-attempt listing endpoint is not available in the reviewed backend contract. No demo transactions are shown in live modes."
+          title="Transactions unavailable"
+        />
+      </>
+    );
+  }
 
   return (
     <>
@@ -62,6 +100,12 @@ export function TransactionDashboard() {
       />
 
       <div className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <Badge tone="warning">Explicit demo data</Badge>
+          {loadedAt ? (
+            <Badge tone="neutral">Loaded {new Date(loadedAt).toLocaleString()}</Badge>
+          ) : null}
+        </div>
         <Card>
           <CardHeader className="flex flex-col gap-1">
             <h2 className="flex items-center gap-2 text-base font-semibold text-slate-950">
@@ -125,7 +169,7 @@ export function TransactionDashboard() {
                 value={sellerId}
               >
                 <option value="all">All sellers</option>
-                {demoSellers.map((seller) => (
+                {sellers.map((seller) => (
                   <option key={seller.id} value={seller.id}>
                     {seller.displayName}
                   </option>

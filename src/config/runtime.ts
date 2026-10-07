@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { networkIdSchema, stellarNetworks, type NetworkId } from "./networks";
 
-const runtimeEnvironmentSchema = z.enum(["local", "testnet", "staging", "mainnet"]);
+const runtimeEnvironmentSchema = z.enum(["demo", "local", "testnet", "mainnet"]);
 
 const booleanFlagSchema = z
   .enum(["true", "false"])
@@ -38,7 +38,7 @@ export type RuntimeConfig = {
 };
 
 export function loadRuntimeConfig(
-  env: Record<string, string | undefined> = process.env
+  env: Record<string, string | undefined> = bundledPublicEnvironment()
 ): RuntimeConfig {
   const parsed = rawPublicEnvSchema.safeParse(env);
 
@@ -69,6 +69,21 @@ export function loadRuntimeConfig(
   };
 }
 
+function bundledPublicEnvironment() {
+  return {
+    NEXT_PUBLIC_ENABLE_MAINNET: process.env.NEXT_PUBLIC_ENABLE_MAINNET,
+    NEXT_PUBLIC_ENABLE_MCP_INSPECTOR: process.env.NEXT_PUBLIC_ENABLE_MCP_INSPECTOR,
+    NEXT_PUBLIC_ENABLE_UPTO_SESSIONS: process.env.NEXT_PUBLIC_ENABLE_UPTO_SESSIONS,
+    NEXT_PUBLIC_LUMENBAZAAR_API_URL: process.env.NEXT_PUBLIC_LUMENBAZAAR_API_URL,
+    NEXT_PUBLIC_LUMENBAZAAR_DEFAULT_NETWORK: process.env.NEXT_PUBLIC_LUMENBAZAAR_DEFAULT_NETWORK,
+    NEXT_PUBLIC_LUMENBAZAAR_ENV: process.env.NEXT_PUBLIC_LUMENBAZAAR_ENV
+  };
+}
+
 export function stripTrailingSlash(value: string) {
   return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
+export function isDemoMode(environment: RuntimeEnvironment = loadRuntimeConfig().environment) {
+  return environment === "demo";
 }

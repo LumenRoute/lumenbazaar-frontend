@@ -25,6 +25,14 @@ export const errorCodeSchema = z.enum([
   "INTERNAL_ERROR"
 ]);
 
+export const clientErrorCodeSchema = z.enum([
+  "BACKEND_UNAVAILABLE",
+  "DEMO_MODE",
+  "INVALID_API_RESPONSE",
+  "UNSUPPORTED_BACKEND_VERSION",
+  "UNSUPPORTED_CAPABILITY"
+]);
+
 const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
     z.string(),
@@ -67,10 +75,6 @@ export type ErrorCode = z.infer<typeof errorCodeSchema>;
 
 export const healthSchema = z.object({
   app: z.string(),
-  dependencies: z.object({
-    database: z.string(),
-    redis: z.string()
-  }),
   ok: z.boolean(),
   service: z.string()
 });
@@ -78,12 +82,38 @@ export const healthSchema = z.object({
 export type Health = z.infer<typeof healthSchema>;
 
 export const versionSchema = z.object({
+  commit: z.string().min(7).optional(),
   environment: z.string(),
   service: z.string(),
   version: z.string()
 });
 
 export type Version = z.infer<typeof versionSchema>;
+
+export const readinessCheckSchema = z.object({
+  detail: z.string().optional(),
+  status: z.enum(["ready", "unavailable", "not_required"])
+});
+
+export const readinessSchema = z.object({
+  capabilities: z.object({
+    exact: z.boolean(),
+    upto: z.boolean()
+  }),
+  checks: z.object({
+    assets: readinessCheckSchema,
+    database: readinessCheckSchema,
+    horizon: readinessCheckSchema,
+    migrations: readinessCheckSchema,
+    redis: readinessCheckSchema,
+    signer: readinessCheckSchema,
+    stellarRpc: readinessCheckSchema
+  }),
+  environment: z.string(),
+  ok: z.boolean()
+});
+
+export type Readiness = z.infer<typeof readinessSchema>;
 
 const supportedAssetSchema = z.object({
   code: z.string(),
@@ -107,28 +137,25 @@ export const networksSchema = z.object({
 
 export type NetworksResponse = z.infer<typeof networksSchema>;
 
-export const supportedSchema = z.object({
-  extensions: z.object({
-    bazaar: z.boolean(),
-    upto: z.boolean(),
-    uptoContracts: z.array(
-      z.union([
-        z.string(),
-        z.object({
-          contractId: z.string(),
-          network: networkIdSchema
-        })
-      ])
-    )
-  }),
-  schemes: z.array(
-    z.object({
-      assets: z.array(supportedAssetSchema),
-      extensions: z.record(z.string(), z.unknown()),
-      name: z.enum(["exact", "upto"]),
-      network: networkIdSchema
+export const supportedKindSchema = z.object({
+  extra: z
+    .object({
+      areFeesSponsored: z.boolean().optional(),
+      assets: z.array(supportedAssetSchema).optional(),
+      contractId: z.string().optional(),
+      sessionEndpoint: z.string().optional()
     })
-  )
+    .catchall(z.unknown())
+    .optional(),
+  network: networkIdSchema,
+  scheme: z.enum(["exact", "upto"]),
+  x402Version: z.literal(2)
+});
+
+export const supportedSchema = z.object({
+  extensions: z.array(z.string()),
+  kinds: z.array(supportedKindSchema),
+  signers: z.record(z.string(), z.array(z.string()))
 });
 
 export type SupportedPaymentSchemes = z.infer<typeof supportedSchema>;
@@ -193,20 +220,17 @@ export const resourceSchema = z.object({
 
 export type Resource = z.infer<typeof resourceSchema>;
 
-export const paymentRequirementSchema = z.object({
+export const resourcePaymentSummarySchema = z.object({
   amount: z.string(),
   assetCode: z.string(),
   assetIssuer: z.string(),
-  expiresAtLedger: z.number().nullable(),
   extensions: jsonObjectSchema,
   network: networkIdSchema,
   payTo: z.string(),
-  resourceId: z.string(),
-  scheme: z.enum(["exact", "upto"]),
-  x402Version: z.string()
+  resourceId: z.string()
 });
 
-export type PaymentRequirement = z.infer<typeof paymentRequirementSchema>;
+export type ResourcePaymentSummary = z.infer<typeof resourcePaymentSummarySchema>;
 
 export const listResourcesQuerySchema = z.object({
   asset: z.string().optional(),
@@ -255,68 +279,111 @@ export const searchResultSchema = z.object({
 
 export type SearchResult = z.infer<typeof searchResultSchema>;
 
-export const exactPaymentPayloadSchema = z.object({
-  amount: z.string(),
-  asset: z.object({
-    code: z.string(),
-    issuer: z.string()
-  }),
-  authorization: z.record(z.string(), z.unknown()).optional(),
-  expiresAtLedger: z.number().int().positive().optional(),
-  memo: z.string().optional(),
+export const exactPaymentRequirementsSchema = z.object({
+  amount: z.string().regex(/^[1-9]\d*$/),
+  asset: z.string().min(1),
+  extra: z
+    .record(z.string(), z.unknown())
+    .nullish()
+    .transform((value) => value ?? {}),
+  maxTimeoutSeconds: z.number().int().positive(),
   network: networkIdSchema,
   payTo: z.string(),
-  paymentHash: z.string().optional(),
   scheme: z.literal("exact")
 });
 
-export const exactPaymentRequirementsSchema = z.object({
-  amount: z.string(),
-  asset: z
-    .object({
-      code: z.string(),
-      issuer: z.string()
-    })
-    .optional(),
-  network: networkIdSchema,
-  payTo: z.string(),
-  scheme: z.literal("exact")
+export type ExactPaymentRequirements = z.infer<typeof exactPaymentRequirementsSchema>;
+
+export const paymentResourceSchema = z.object({
+  description: z.string().optional(),
+  iconUrl: z.string().url().optional(),
+  mimeType: z.string().optional(),
+  serviceName: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  url: z.string().url()
+});
+
+export const paymentRequiredV2Schema = z.object({
+  accepts: z.array(exactPaymentRequirementsSchema).min(1),
+  error: z.string().optional(),
+  extensions: z.record(z.string(), z.unknown()).nullish(),
+  resource: paymentResourceSchema,
+  x402Version: z.literal(2)
+});
+
+export type PaymentRequiredV2 = z.infer<typeof paymentRequiredV2Schema>;
+
+export const paymentPayloadV2Schema = z.object({
+  accepted: exactPaymentRequirementsSchema,
+  extensions: z.record(z.string(), z.unknown()).optional(),
+  payload: z.object({
+    transaction: z.string().min(1)
+  }),
+  resource: paymentResourceSchema.optional(),
+  x402Version: z.literal(2)
 });
 
 export const paymentPayloadSchema = z.object({
-  currentLedger: z.number().int().nonnegative().optional(),
-  paymentPayload: exactPaymentPayloadSchema,
+  paymentPayload: paymentPayloadV2Schema,
   paymentRequirements: exactPaymentRequirementsSchema,
-  resourceId: z.string().optional(),
-  sellerId: z.string().optional()
+  x402Version: z.literal(2)
 });
 
 export type PaymentPayload = z.infer<typeof paymentPayloadSchema>;
 
 export const paymentVerificationSchema = z.object({
-  adapter: z.literal("@x402/stellar"),
-  network: networkIdSchema,
-  paymentAttemptId: z.string(),
-  paymentHash: z.string(),
-  status: z.literal("verified")
+  extensionResponses: z.record(z.string(), z.unknown()).optional(),
+  extensions: z.record(z.string(), z.unknown()).optional(),
+  extra: z
+    .object({
+      lumenbazaar: z.object({
+        adapter: z.literal("@x402/stellar"),
+        correlationId: z.string(),
+        network: networkIdSchema,
+        paymentAttemptId: z.string(),
+        paymentHash: z.string(),
+        status: z.literal("verified")
+      })
+    })
+    .optional(),
+  invalidMessage: z.string().optional(),
+  invalidReason: z.string().optional(),
+  isValid: z.boolean(),
+  payer: z.string().optional()
 });
 
 export type PaymentVerification = z.infer<typeof paymentVerificationSchema>;
 
-export const settlementRequestSchema = paymentPayloadSchema.extend({
-  paymentAttemptId: z.string().min(1)
-});
+export const settlementRequestSchema = paymentPayloadSchema;
 
 export type SettlementRequest = z.infer<typeof settlementRequestSchema>;
 
 export const settlementSchema = z.object({
-  ledger: z.number(),
+  amount: z
+    .string()
+    .regex(/^[1-9]\d*$/)
+    .optional(),
+  errorMessage: z.string().optional(),
+  errorReason: z.string().optional(),
+  extensionResponses: z.record(z.string(), z.unknown()).optional(),
+  extensions: z.record(z.string(), z.unknown()).optional(),
+  extra: z
+    .object({
+      lumenbazaar: z.object({
+        correlationId: z.string(),
+        ledger: z.number().int().nonnegative(),
+        paymentAttemptId: z.string(),
+        receiptId: z.string(),
+        settlementId: z.string(),
+        status: z.literal("confirmed"),
+        transactionHash: z.string()
+      })
+    })
+    .optional(),
   network: networkIdSchema,
-  paymentAttemptId: z.string(),
-  receiptId: z.string(),
-  settlementId: z.string(),
-  status: z.literal("settled"),
-  transactionHash: z.string()
+  payer: z.string().optional(),
+  success: z.boolean(),
+  transaction: z.string()
 });
 
 export type Settlement = z.infer<typeof settlementSchema>;
@@ -325,7 +392,9 @@ export const receiptSchema = z.object({
   amount: z.string(),
   assetCode: z.string(),
   assetIssuer: z.string(),
+  correlationId: z.string(),
   createdAt: z.string(),
+  evidenceHash: z.string(),
   failureCode: z.string().nullable(),
   failureReason: z.string().nullable(),
   id: z.string(),
@@ -341,6 +410,24 @@ export const receiptSchema = z.object({
 });
 
 export type Receipt = z.infer<typeof receiptSchema>;
+
+export const paymentFlowStateSchema = z.enum([
+  "simulation",
+  "wallet-draft",
+  "submitted",
+  "confirmed",
+  "unknown"
+]);
+
+export type PaymentFlowState = z.infer<typeof paymentFlowStateSchema>;
+
+export const paymentFlowStateLabels: Record<PaymentFlowState, string> = {
+  confirmed: "Confirmed",
+  simulation: "Simulation",
+  submitted: "Submitted",
+  unknown: "Unknown",
+  "wallet-draft": "Wallet draft"
+};
 
 export const conformanceRunSchema = z.object({
   completedAt: z.string(),

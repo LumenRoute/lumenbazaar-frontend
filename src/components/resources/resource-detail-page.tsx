@@ -7,6 +7,7 @@ import { loadResourceDetail } from "@/services/resource-detail";
 import { normalizeUiError } from "@/services/ui-state";
 
 import { ResourceDetailSummary } from "./resource-detail-summary";
+import { PaymentChallengePanel } from "./payment-challenge-panel";
 import { PaymentRequirementViewer } from "./payment-requirement-viewer";
 import { ResourceSchemaViewer } from "./resource-schema-viewer";
 
@@ -23,7 +24,7 @@ export function ResourceDetailPage({ resourceId }: { resourceId: string }) {
   if (data === undefined || error !== null) {
     const state = normalizeUiError(error, {
       code: "RESOURCE_UNAVAILABLE",
-      description: "The resource detail could not be loaded from the API or local fixtures.",
+      description: "The resource detail could not be verified against the configured backend.",
       title: "Resource unavailable"
     });
 
@@ -42,6 +43,7 @@ export function ResourceDetailPage({ resourceId }: { resourceId: string }) {
     <div className="space-y-5">
       <ResourceDetailSummary {...data} />
       <PaymentRequirementViewer requirement={data.requirement} />
+      <PaymentChallengePanel resource={data.resource} source={data.source} />
       <ResourceSchemaViewer
         inputSchema={data.resource.inputSchema}
         outputSchema={data.resource.outputSchema}

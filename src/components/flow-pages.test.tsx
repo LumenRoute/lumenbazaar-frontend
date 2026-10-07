@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DocsIndex } from "@/components/docs/docs-index";
 import { OperatorHealthTable } from "@/components/operators/operator-health-table";
@@ -8,7 +8,10 @@ import { TransactionDashboard } from "@/components/transactions/transaction-dash
 import type { OperatorHealthRow } from "@/services/operators";
 
 describe("implemented flow pages", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   it("filters transaction rows by status", () => {
+    vi.stubEnv("NEXT_PUBLIC_LUMENBAZAAR_ENV", "demo");
     render(<TransactionDashboard />);
 
     expect(screen.getByRole("heading", { name: "Transactions" })).toBeInTheDocument();

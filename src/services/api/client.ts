@@ -1,6 +1,7 @@
 import { type z } from "zod";
 
-import { loadRuntimeConfig } from "@/config/runtime";
+import { loadRuntimeConfig, type RuntimeEnvironment } from "@/config/runtime";
+import type { NetworkId } from "@/config/networks";
 
 import {
   apiFailureSchema,
@@ -13,6 +14,7 @@ import {
   networksSchema,
   paymentPayloadSchema,
   paymentVerificationSchema,
+  readinessSchema,
   receiptSchema,
   resourceSchema,
   resourcesPageSchema,
@@ -32,6 +34,7 @@ import {
   type ListResourcesQuery,
   type PaymentPayload,
   type PaymentVerification,
+  type Readiness,
   type Receipt,
   type Resource,
   type ResourcesPage,
@@ -46,15 +49,21 @@ import {
 
 type ApiClientOptions = {
   baseUrl?: string;
+  expectedNetwork?: NetworkId;
   fetchImpl?: typeof fetch;
+  mode?: RuntimeEnvironment;
+  validateCompatibility?: boolean;
 };
 
 type RequestOptions<TSchema extends z.ZodType> = {
   body?: unknown;
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   query?: Record<string, string | number | boolean | null | undefined>;
+  requiresCompatibility?: boolean;
   schema: TSchema;
 };
+
+export const supportedBackendApiVersion = "0.1.0";
 
 export class ApiClientError extends Error {
   readonly code: string;
@@ -86,21 +95,32 @@ export class ApiClientError extends Error {
 
 export class LumenBazaarApiClient {
   private readonly baseUrl: string;
+  private compatibility: Promise<BackendContract> | undefined;
+  private readonly expectedNetwork: NetworkId;
   private readonly fetchImpl: typeof fetch;
+  private readonly mode: RuntimeEnvironment;
+  private readonly validateCompatibility: boolean;
 
   constructor(options: ApiClientOptions = {}) {
     const config = loadRuntimeConfig();
 
     this.baseUrl = options.baseUrl ?? config.apiBaseUrl;
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.expectedNetwork = options.expectedNetwork ?? config.defaultNetwork;
+    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
+    this.mode = options.mode ?? config.environment;
+    this.validateCompatibility = options.validateCompatibility ?? true;
   }
 
   getHealth() {
-    return this.request("/health", { schema: healthSchema });
+    return this.request("/health", { requiresCompatibility: false, schema: healthSchema });
   }
 
   getVersion() {
-    return this.request("/version", { schema: versionSchema });
+    return this.request("/version", { requiresCompatibility: false, schema: versionSchema });
+  }
+
+  getReadiness() {
+    return this.request("/ready", { requiresCompatibility: false, schema: readinessSchema });
   }
 
   getNetworks() {
@@ -108,12 +128,25 @@ export class LumenBazaarApiClient {
   }
 
   getSupported() {
-    return this.request("/v1/supported", { schema: supportedSchema });
+    return this.request("/v1/supported", {
+      requiresCompatibility: false,
+      schema: supportedSchema
+    });
   }
 
   listResources(query: ListResourcesQuery = {}): Promise<ResourcesPage> {
     return this.request("/v1/resources", {
       query: listResourcesQuerySchema.parse(query),
+      schema: resourcesPageSchema
+    });
+  }
+
+  listSellerResources(
+    sellerId: string,
+    query: Omit<ListResourcesQuery, "sellerId"> = {}
+  ): Promise<ResourcesPage> {
+    return this.request(`/v1/sellers/${encodeURIComponent(sellerId)}/resources`, {
+      query: listResourcesQuerySchema.omit({ sellerId: true }).parse(query),
       schema: resourcesPageSchema
     });
   }
@@ -235,24 +268,139 @@ export class LumenBazaarApiClient {
     path: string,
     options: RequestOptions<TSchema>
   ): Promise<z.infer<TSchema>> {
+    if (options.requiresCompatibility !== false && this.validateCompatibility) {
+      await this.ensureCompatible();
+    }
+
     const requestId = createRequestId();
-    const response = await this.fetchImpl(buildUrl(this.baseUrl, path, options.query), {
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "x-request-id": requestId
-      },
-      method: options.method ?? "GET"
-    });
+    let response: Response;
+
+    try {
+      response = await this.fetchImpl(buildUrl(this.baseUrl, path, options.query), {
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "x-request-id": requestId
+        },
+        method: options.method ?? "GET"
+      });
+    } catch (error) {
+      if (error instanceof ApiClientError) throw error;
+      throw new ApiClientError({
+        code: "BACKEND_UNAVAILABLE",
+        message: "The LumenBazaar backend is unavailable.",
+        status: 0
+      });
+    }
 
     if (!response.ok) {
       throw await parseApiError(response);
     }
 
-    const json = (await response.json()) as unknown;
-    return options.schema.parse(json);
+    const json = await readJson(response);
+    const parsed = options.schema.safeParse(json);
+
+    if (!parsed.success) {
+      throw new ApiClientError({
+        code: "INVALID_API_RESPONSE",
+        details: { issues: parsed.error.issues },
+        message: `The backend returned an invalid response for ${path}.`,
+        requestId: response.headers.get("x-request-id") ?? undefined,
+        status: response.status
+      });
+    }
+
+    return parsed.data;
   }
+
+  private ensureCompatible() {
+    if (this.mode === "demo") {
+      return Promise.reject(
+        new ApiClientError({
+          code: "DEMO_MODE",
+          message: "Backend requests are disabled in explicit demo mode.",
+          status: 0
+        })
+      );
+    }
+
+    this.compatibility ??= Promise.all([
+      this.getVersion(),
+      this.getReadiness(),
+      this.getSupported()
+    ])
+      .then(([version, readiness, supported]) =>
+        assertBackendCompatibility({
+          expectedNetwork: this.expectedNetwork,
+          mode: this.mode,
+          readiness,
+          supported,
+          version
+        })
+      )
+      .catch((error: unknown) => {
+        this.compatibility = undefined;
+        throw error;
+      });
+
+    return this.compatibility;
+  }
+}
+
+export type BackendContract = {
+  environment: string;
+  network: NetworkId;
+  version: string;
+  x402Version: 2;
+};
+
+export function assertBackendCompatibility({
+  expectedNetwork,
+  mode,
+  readiness,
+  supported,
+  version
+}: {
+  expectedNetwork: NetworkId;
+  mode: RuntimeEnvironment;
+  readiness: Readiness;
+  supported: ReturnType<typeof supportedSchema.parse>;
+  version: ReturnType<typeof versionSchema.parse>;
+}): BackendContract {
+  if (version.version !== supportedBackendApiVersion) {
+    throw new ApiClientError({
+      code: "UNSUPPORTED_BACKEND_VERSION",
+      message: `Backend API ${version.version} is unsupported; expected ${supportedBackendApiVersion}.`,
+      status: 409
+    });
+  }
+
+  if (version.environment !== mode || readiness.environment !== mode) {
+    throw new ApiClientError({
+      code: "UNSUPPORTED_BACKEND_VERSION",
+      message: `Backend environment does not match frontend mode ${mode}.`,
+      status: 409
+    });
+  }
+
+  const exactKind = supported.kinds.find(
+    (kind) => kind.x402Version === 2 && kind.scheme === "exact" && kind.network === expectedNetwork
+  );
+  if (!readiness.ok || !readiness.capabilities.exact || exactKind === undefined) {
+    throw new ApiClientError({
+      code: "UNSUPPORTED_CAPABILITY",
+      message: `Backend is not ready for x402 v2 exact payments on ${expectedNetwork}.`,
+      status: 503
+    });
+  }
+
+  return {
+    environment: version.environment,
+    network: expectedNetwork,
+    version: version.version,
+    x402Version: 2
+  };
 }
 
 export const apiClient = new LumenBazaarApiClient();

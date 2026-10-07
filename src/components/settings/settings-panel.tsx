@@ -60,7 +60,7 @@ export function SettingsPanel() {
   return (
     <>
       <PageHeader
-        description="Configure local frontend preferences for network selection, facilitator routing, wallet behavior, and fixture fallback."
+        description="Configure local frontend preferences for network selection, facilitator routing, and wallet behavior."
         title="Settings"
       />
 
@@ -125,21 +125,6 @@ export function SettingsPanel() {
                 ))}
               </div>
             </fieldset>
-
-            <label className="flex items-start gap-3 rounded-md border border-slate-200 p-3 text-sm">
-              <input
-                checked={settings.localDemoMode}
-                className="mt-1 h-4 w-4"
-                onChange={(event) => updateSettings({ localDemoMode: event.target.checked })}
-                type="checkbox"
-              />
-              <span>
-                <span className="block font-medium text-slate-950">Local demo mode</span>
-                <span className="mt-1 block text-slate-600">
-                  Use bundled fixtures when local backend endpoints are unavailable.
-                </span>
-              </span>
-            </label>
 
             <div className="flex flex-wrap gap-2">
               <Button onClick={save} type="button">

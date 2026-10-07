@@ -7,10 +7,11 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { EmptyState, LoadingState } from "@/components/ui/surfaces";
+import { DataFreshnessBadge } from "@/components/ui/data-freshness-badge";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/surfaces";
 import { queryKeys } from "@/services/api/query";
 import { conformanceEndpointStatus, loadOperatorSnapshot, statusTone } from "@/services/operators";
-import { emptyStateForCollection } from "@/services/ui-state";
+import { emptyStateForCollection, normalizeUiError } from "@/services/ui-state";
 
 const endpointChecks = [
   { endpoint: "/v1/supported", label: "/supported" },
@@ -21,6 +22,7 @@ const endpointChecks = [
 export function ConformancePanel() {
   const {
     data: snapshot,
+    error,
     isLoading,
     refetch
   } = useQuery({
@@ -28,8 +30,40 @@ export function ConformancePanel() {
     queryKey: queryKeys.conformance
   });
 
-  if (isLoading || snapshot === undefined) {
+  if (isLoading) {
     return <LoadingState label="Loading conformance evidence" />;
+  }
+
+  if (snapshot === undefined) {
+    const state = normalizeUiError(error, {
+      code: "BACKEND_UNAVAILABLE",
+      description: "Conformance evidence could not be verified against the configured backend.",
+      title: "Conformance unavailable"
+    });
+    return <ErrorState {...state} onRetry={() => void refetch()} />;
+  }
+
+  if (snapshot.conformance === null) {
+    return (
+      <>
+        <PageHeader
+          actions={
+            <Button onClick={() => void refetch()} type="button" variant="secondary">
+              <RefreshCcw aria-hidden="true" className="h-4 w-4" />
+              Refresh
+            </Button>
+          }
+          description="Review facilitator conformance for supported schemes, exact verification, exact settlement, and reserved capped-session coverage."
+          title="Conformance"
+        />
+        <ErrorState
+          code="CONFORMANCE_UNAVAILABLE"
+          description="No live conformance run could be verified from the configured backend."
+          onRetry={() => void refetch()}
+          title="Conformance unavailable"
+        />
+      </>
+    );
   }
 
   const run = snapshot.conformance;
@@ -53,11 +87,16 @@ export function ConformancePanel() {
       <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={snapshot.source === "api" ? "success" : "warning"}>
-            {snapshot.source === "api" ? "API data" : "Local demo data"}
+            {snapshot.source === "api"
+              ? "Live API data"
+              : snapshot.source === "demo"
+                ? "Explicit demo data"
+                : "Partial API data"}
           </Badge>
+          <DataFreshnessBadge observedAt={snapshot.checkedAt} source={snapshot.source} />
           {snapshot.warnings.map((warning) => (
             <Badge key={warning} tone="neutral">
-              {warning} fallback
+              {warning} unavailable
             </Badge>
           ))}
         </div>

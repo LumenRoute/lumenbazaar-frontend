@@ -1,8 +1,10 @@
 import { apiClient, type LumenBazaarApiClient } from "@/services/api/client";
 import type { Resource, ResourceType, SearchResult } from "@/services/api/schemas";
 import type { NetworkId } from "@/config/networks";
+import { isDemoMode, type RuntimeEnvironment } from "@/config/runtime";
 
 import { demoResources } from "@/fixtures/lumenbazaar";
+import { currentRuntimeMode } from "@/services/runtime-mode";
 
 export type ResourceSort = "relevance" | "price-asc" | "price-desc" | "recent";
 
@@ -20,6 +22,7 @@ export type ExploreSearchInput = {
 };
 
 export type ExploreSearchResult = SearchResult & {
+  fetchedAt: string;
   source: "api" | "demo";
 };
 
@@ -27,28 +30,12 @@ type CatalogClient = Pick<LumenBazaarApiClient, "searchResources">;
 
 export async function searchCatalog(
   input: ExploreSearchInput,
-  client: CatalogClient = apiClient
+  client: CatalogClient = apiClient,
+  mode: RuntimeEnvironment = currentRuntimeMode()
 ): Promise<ExploreSearchResult> {
-  try {
-    const result = await client.searchResources({
-      cursor: input.cursor,
-      extension: input.extension,
-      limit: 12,
-      maxPrice: input.maxPrice,
-      minPrice: input.minPrice,
-      network: input.network,
-      q: input.q,
-      sellerVerified:
-        input.sellerVerification === "any" ? undefined : input.sellerVerification === "verified",
-      type: input.type
-    });
-
+  if (isDemoMode(mode)) {
     return {
-      ...sortSearchResult(result, input.sort ?? "relevance"),
-      source: "api"
-    };
-  } catch {
-    return {
+      fetchedAt: new Date().toISOString(),
       nextCursor: null,
       partialResults: false,
       ranking: {
@@ -66,6 +53,25 @@ export async function searchCatalog(
       source: "demo"
     };
   }
+
+  const result = await client.searchResources({
+    cursor: input.cursor,
+    extension: input.extension,
+    limit: 12,
+    maxPrice: input.maxPrice,
+    minPrice: input.minPrice,
+    network: input.network,
+    q: input.q,
+    sellerVerified:
+      input.sellerVerification === "any" ? undefined : input.sellerVerification === "verified",
+    type: input.type
+  });
+
+  return {
+    ...sortSearchResult(result, input.sort ?? "relevance"),
+    fetchedAt: new Date().toISOString(),
+    source: "api"
+  };
 }
 
 export function sortSearchResult(result: SearchResult, sort: ResourceSort): SearchResult {

@@ -1,7 +1,9 @@
 import { apiClient, type LumenBazaarApiClient } from "@/services/api/client";
 import type { VerifyDomainResult } from "@/services/api/schemas";
+import { isDemoMode, type RuntimeEnvironment } from "@/config/runtime";
 
 import { findDemoSeller } from "@/fixtures/lumenbazaar";
+import { currentRuntimeMode } from "@/services/runtime-mode";
 
 type DomainVerificationClient = Pick<
   LumenBazaarApiClient,
@@ -18,24 +20,24 @@ export type DomainVerificationFailure = {
 export async function requestDomainChallenge(
   sellerId: string,
   method: DomainVerificationMethod,
-  client: DomainVerificationClient = apiClient
+  client: DomainVerificationClient = apiClient,
+  mode: RuntimeEnvironment = currentRuntimeMode()
 ): Promise<VerifyDomainResult> {
-  try {
-    return await client.requestDomainChallenge(sellerId, method);
-  } catch {
+  if (isDemoMode(mode)) {
     return createDemoChallenge(sellerId, method);
   }
+
+  return client.requestDomainChallenge(sellerId, method);
 }
 
 export async function submitDomainVerification(
   sellerId: string,
   evidence: string,
   method: DomainVerificationMethod,
-  client: DomainVerificationClient = apiClient
+  client: DomainVerificationClient = apiClient,
+  mode: RuntimeEnvironment = currentRuntimeMode()
 ): Promise<VerifyDomainResult> {
-  try {
-    return await client.submitDomainVerification(sellerId, evidence, method);
-  } catch {
+  if (isDemoMode(mode)) {
     const challenge = createDemoChallenge(sellerId, method);
 
     return {
@@ -44,6 +46,8 @@ export async function submitDomainVerification(
       verified: evidence.includes(challenge.challenge)
     };
   }
+
+  return client.submitDomainVerification(sellerId, evidence, method);
 }
 
 export function failureForVerification(

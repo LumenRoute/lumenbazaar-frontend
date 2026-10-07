@@ -5,6 +5,7 @@ import { Activity, Database, Gauge, Store, WalletCards, type LucideIcon } from "
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { DataFreshnessBadge } from "@/components/ui/data-freshness-badge";
 import { queryKeys } from "@/services/api/query";
 import { formatDuration, loadDashboardSnapshot } from "@/services/dashboard";
 
@@ -64,22 +65,27 @@ export function DashboardMetrics() {
           tone={
             snapshot.source === "api"
               ? "success"
-              : snapshot.source === "partial"
+              : snapshot.source === "demo"
                 ? "warning"
-                : "danger"
+                : snapshot.source === "partial"
+                  ? "warning"
+                  : "danger"
           }
         >
           {snapshot.source === "api"
             ? "Live API data"
-            : snapshot.source === "partial"
-              ? "Partial API data"
-              : "API unavailable"}
+            : snapshot.source === "demo"
+              ? "Explicit demo data"
+              : snapshot.source === "partial"
+                ? "Partial API data"
+                : "API unavailable"}
         </Badge>
         {snapshot.warnings.map((warning) => (
           <Badge key={warning} tone="neutral">
             {warning} unavailable
           </Badge>
         ))}
+        <DataFreshnessBadge observedAt={snapshot.checkedAt} source={snapshot.source} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

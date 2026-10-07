@@ -5,24 +5,31 @@ import { demoResources } from "@/fixtures/lumenbazaar";
 import { buildPaymentRequirement, loadResourceDetail } from "./resource-detail";
 
 describe("resource detail loader", () => {
-  it("falls back to local resource details when the API is unavailable", async () => {
-    const detail = await loadResourceDetail("resource_weather_lagos", {
-      getResource: async () => Promise.reject(new Error("offline"))
-    });
+  it("loads local resource details only in explicit demo mode", async () => {
+    const detail = await loadResourceDetail(
+      "resource_weather_lagos",
+      {
+        getResource: async () => Promise.reject(new Error("offline"))
+      },
+      "demo"
+    );
 
     expect(detail.source).toBe("demo");
     expect(detail.resource.name).toBe("Paid Weather API");
-    expect(detail.requirement.scheme).toBe("exact");
     expect(detail.receipts).toHaveLength(1);
   });
 
   it("uses an API resource when the backend returns one", async () => {
-    const detail = await loadResourceDetail("resource_api", {
-      getResource: async () => ({
-        ...demoResources[0]!,
-        id: "resource_api"
-      })
-    });
+    const detail = await loadResourceDetail(
+      "resource_api",
+      {
+        getResource: async () => ({
+          ...demoResources[0]!,
+          id: "resource_api"
+        })
+      },
+      "testnet"
+    );
 
     expect(detail.source).toBe("api");
     expect(detail.resource.id).toBe("resource_api");
@@ -35,9 +42,17 @@ describe("resource detail loader", () => {
     expect(requirement).toMatchObject({
       amount: "0.0500000",
       assetCode: "USDC",
-      network: "stellar:testnet",
-      scheme: "exact",
-      x402Version: "1"
+      network: "stellar:testnet"
     });
+  });
+
+  it("does not use a matching demo resource after a live API failure", async () => {
+    await expect(
+      loadResourceDetail(
+        "resource_weather_lagos",
+        { getResource: async () => Promise.reject(new Error("offline")) },
+        "testnet"
+      )
+    ).rejects.toThrow("offline");
   });
 });
