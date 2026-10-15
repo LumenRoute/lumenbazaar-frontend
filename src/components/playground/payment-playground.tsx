@@ -9,7 +9,7 @@ import {
   ShieldCheck,
   Wallet
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +23,6 @@ import {
   paymentFlowStateLabels,
   type PaymentFlowState,
   type PaymentPayload,
-  type PaymentVerification,
   type Resource,
   type Settlement
 } from "@/services/api/schemas";
@@ -31,10 +30,15 @@ import {
   buildPaymentRequiredPreview,
   buildPlaygroundPaymentRequest,
   buildSampleRequest,
+  markSettlementAsLive,
+  markVerificationAsLive,
   simulateSettlement,
   simulateVerification,
   type PaymentRequiredPreview,
-  type PlaygroundAuthorizationMode
+  type PlaygroundAuthorizationMode,
+  type PlaygroundDataMode,
+  type PlaygroundSettlement,
+  type PlaygroundVerification
 } from "@/services/playground";
 import { explorerTransactionUrl, shortHash } from "@/services/payments";
 import { normalizeUiError, redactSensitivePaymentData } from "@/services/ui-state";
@@ -61,26 +65,62 @@ export function PaymentPlayground() {
 }
 
 function DemoPaymentPlayground() {
+  const [dataMode, setDataMode] = useState<PlaygroundDataMode>("simulation");
+  const [authMode, setAuthMode] = useState<PlaygroundAuthorizationMode>("simulation");
   const [selectedResourceId, setSelectedResourceId] = useState(demoResources[0]?.id ?? "");
-  const [mode, setMode] = useState<PlaygroundAuthorizationMode>("simulation");
+  const [liveResources, setLiveResources] = useState<Resource[] | null>(null);
+  const [apiLoadError, setApiLoadError] = useState<string | null>(null);
+  const [loadingLiveResources, setLoadingLiveResources] = useState(false);
   const [preview, setPreview] = useState<PaymentRequiredPreview | null>(null);
   const [paymentRequest, setPaymentRequest] = useState<PaymentPayload | null>(null);
-  const [verification, setVerification] = useState<PaymentVerification | null>(null);
-  const [settlement, setSettlement] = useState<Settlement | null>(null);
+  const [verification, setVerification] = useState<PlaygroundVerification | null>(null);
+  const [settlement, setSettlement] = useState<PlaygroundSettlement | null>(null);
   const [error, setError] = useState<{ code: string; message: string; retryable?: boolean } | null>(null);
   const [preflightError, setPreflightError] = useState<PreflightCheckError | null>(null);
   const [busy, setBusy] = useState<"verify" | "settle" | "preflight" | null>(null);
+
+  // Attempt to load live resources on mount
+  useEffect(() => {
+    loadLiveResourcesIfAvailable();
+  }, []);
+
+  async function loadLiveResourcesIfAvailable() {
+    setLoadingLiveResources(true);
+    setApiLoadError(null);
+    try {
+      const resources = await apiClient.listResources();
+      setLiveResources(resources.data);
+      // Switch to live mode if we successfully loaded resources
+      setDataMode("live");
+    } catch (caught) {
+      const normalized = normalizeUiError(caught, {
+        code: "API_UNAVAILABLE",
+        description: "Could not reach the live API. Use Simulation mode to work with fixtures.",
+        title: "Live API unavailable"
+      });
+      setApiLoadError(normalized.description);
+      // Keep in simulation mode as fallback
+      setDataMode("simulation");
+    } finally {
+      setLoadingLiveResources(false);
+    }
+  }
+
+  // Get current resources based on mode
+  const currentResources = dataMode === "live" && liveResources ? liveResources : demoResources;
+
   const resource = useMemo<Resource>(
-    () => demoResources.find((item) => item.id === selectedResourceId) ?? demoResources[0]!,
-    [selectedResourceId]
+    () => currentResources.find((item) => item.id === selectedResourceId) ?? currentResources[0]!,
+    [selectedResourceId, currentResources]
   );
+
   const sampleRequest = useMemo(
     () => (resource ? buildSampleRequest(resource.inputSchema) : {}),
     [resource]
   );
 
-  function prepare(resource: Resource, authorizationMode = mode) {
-    const nextRequest = buildPlaygroundPaymentRequest(resource, { authorizationMode });
+  function prepare(resource: Resource, authMode: PlaygroundAuthorizationMode = authMode) {
+    const nextRequest = buildPlaygroundPaymentRequest(resource, { authorizationMode: authMode });
 
     setPreview(buildPaymentRequiredPreview(resource));
     setPaymentRequest(nextRequest);
@@ -89,6 +129,43 @@ function DemoPaymentPlayground() {
     setError(null);
     setPreflightError(null);
     return nextRequest;
+  }
+
+  async function switchDataMode(newMode: PlaygroundDataMode) {
+    setDataMode(newMode);
+    setApiLoadError(null);
+
+    if (newMode === "live") {
+      // Try to load live resources when switching to live
+      setLoadingLiveResources(true);
+      try {
+        const resources = await apiClient.listResources();
+        setLiveResources(resources.data);
+      } catch (caught) {
+        const normalized = normalizeUiError(caught, {
+          code: "API_UNAVAILABLE",
+          description: "Could not reach the live API.",
+          title: "Live API unavailable"
+        });
+        setApiLoadError(normalized.description);
+        // Revert to simulation if load fails
+        setDataMode("simulation");
+      } finally {
+        setLoadingLiveResources(false);
+      }
+    }
+
+    // Clear verification/settlement state to avoid mixing live and simulated records
+    setVerification(null);
+    setSettlement(null);
+    setError(null);
+    setPreflightError(null);
+    setPreview(null);
+    setPaymentRequest(null);
+
+    // Reset selected resource to first available in new mode
+    const availableResources = newMode === "live" && liveResources ? liveResources : demoResources;
+    setSelectedResourceId(availableResources[0]?.id ?? "");
   }
 
   async function runPreflightCheck(publicKey: string) {
@@ -119,7 +196,7 @@ function DemoPaymentPlayground() {
   }
 
   function runSimulatedVerify() {
-    const request = paymentRequest ?? prepare(resource);
+    const request = paymentRequest ?? prepare(resource, authMode);
 
     setVerification(simulateVerification(request));
     setSettlement(null);
@@ -127,14 +204,15 @@ function DemoPaymentPlayground() {
   }
 
   async function runBackendVerify() {
-    const request = paymentRequest ?? prepare(resource);
+    const request = paymentRequest ?? prepare(resource, authMode);
 
     setBusy("verify");
     setError(null);
     setSettlement(null);
 
     try {
-      setVerification(await apiClient.verifyPayment(request));
+      const verification = await apiClient.verifyPayment(request);
+      setVerification(markVerificationAsLive(verification));
     } catch (caught) {
       setVerification(null);
       setError(normalizePlaygroundError(caught));
@@ -144,7 +222,7 @@ function DemoPaymentPlayground() {
   }
 
   function runSimulatedSettle() {
-    const request = paymentRequest ?? prepare(resource);
+    const request = paymentRequest ?? prepare(resource, authMode);
     const currentVerification = verification ?? simulateVerification(request);
 
     setVerification(currentVerification);
@@ -153,7 +231,7 @@ function DemoPaymentPlayground() {
   }
 
   async function runBackendSettle() {
-    const request = paymentRequest ?? prepare(resource);
+    const request = paymentRequest ?? prepare(resource, authMode);
     const currentVerification = verification;
 
     if (currentVerification === null) {
@@ -168,7 +246,8 @@ function DemoPaymentPlayground() {
     setError(null);
 
     try {
-      setSettlement(await apiClient.settlePayment(request));
+      const settlement = await apiClient.settlePayment(request);
+      setSettlement(markSettlementAsLive(settlement));
     } catch (caught) {
       setSettlement(null);
       setError(normalizePlaygroundError(caught));
@@ -185,7 +264,7 @@ function DemoPaymentPlayground() {
       : settlement?.success
         ? "confirmed"
         : verification
-          ? mode === "simulation"
+          ? verification.dataMode === "simulation"
             ? "simulation"
             : "wallet-draft"
           : "unknown";
@@ -199,6 +278,70 @@ function DemoPaymentPlayground() {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-5">
+          <Card>
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-slate-950">Data Mode</h2>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Data mode">
+                <Button
+                  disabled={loadingLiveResources || liveResources === null}
+                  onClick={() => void switchDataMode("live")}
+                  type="button"
+                  variant={dataMode === "live" ? "primary" : "secondary"}
+                  title={liveResources === null ? "Live API currently unavailable" : ""}
+                >
+                  <span className="h-4 w-4" aria-hidden="true">
+                    🌐
+                  </span>
+                  Live
+                </Button>
+                <Button
+                  onClick={() => void switchDataMode("simulation")}
+                  type="button"
+                  variant={dataMode === "simulation" ? "primary" : "secondary"}
+                >
+                  <Play aria-hidden="true" className="h-4 w-4" />
+                  Simulation
+                </Button>
+              </div>
+
+              {apiLoadError ? (
+                <div className="rounded-md border border-red-200 bg-red-50 p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 text-red-700" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-red-900">Live resources unavailable</p>
+                      <p className="mt-1 text-sm text-red-800">{apiLoadError}</p>
+                      {dataMode === "live" && (
+                        <Button
+                          className="mt-2"
+                          onClick={() => void switchDataMode("simulation")}
+                          type="button"
+                          variant="secondary"
+                        >
+                          Switch to Simulation
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {dataMode && (
+                <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                  <span className="text-sm text-slate-600">Mode:</span>
+                  <Badge
+                    tone={dataMode === "live" ? "success" : "warning"}
+                    className={dataMode === "live" ? "" : ""}
+                  >
+                    {dataMode === "live" ? "Live API" : "Simulated (fixtures)"}
+                  </Badge>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+
           <Card>
             <CardHeader>
               <h2 className="text-lg font-semibold text-slate-950">Resource</h2>
@@ -218,7 +361,7 @@ function DemoPaymentPlayground() {
                   }}
                   value={resource.id}
                 >
-                  {demoResources.map((item) => (
+                  {currentResources.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
                     </option>
@@ -244,22 +387,22 @@ function DemoPaymentPlayground() {
               <div className="flex flex-wrap gap-2" role="group" aria-label="Authorization mode">
                 <Button
                   onClick={() => {
-                    setMode("simulation");
+                    setAuthMode("simulation");
                     prepare(resource, "simulation");
                   }}
                   type="button"
-                  variant={mode === "simulation" ? "primary" : "secondary"}
+                  variant={authMode === "simulation" ? "primary" : "secondary"}
                 >
                   <Play aria-hidden="true" className="h-4 w-4" />
                   Simulation
                 </Button>
                 <Button
                   onClick={() => {
-                    setMode("wallet");
+                    setAuthMode("wallet");
                     prepare(resource, "wallet");
                   }}
                   type="button"
-                  variant={mode === "wallet" ? "primary" : "secondary"}
+                  variant={authMode === "wallet" ? "primary" : "secondary"}
                 >
                   <Wallet aria-hidden="true" className="h-4 w-4" />
                   Wallet draft
@@ -382,6 +525,7 @@ function DemoPaymentPlayground() {
               {verification ? (
                 <ResultPanel
                   label="Verification"
+                  dataMode={verification.dataMode}
                   rows={[
                     ["Status", verification.isValid ? "verified" : "rejected"],
                     ["Attempt", verificationEvidence?.paymentAttemptId ?? "Unavailable"],
@@ -395,6 +539,7 @@ function DemoPaymentPlayground() {
               {settlement ? (
                 <ResultPanel
                   label="Settlement"
+                  dataMode={settlement.dataMode}
                   rows={[
                     ["Status", settlement.success ? "confirmed" : "unknown"],
                     ["Receipt", settlementEvidence?.receiptId ?? "Unavailable"],
@@ -405,7 +550,7 @@ function DemoPaymentPlayground() {
                 />
               ) : null}
 
-              {settlement?.transaction ? (
+              {settlement?.dataMode === "live" && settlement?.transaction ? (
                 <a
                   className="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm hover:bg-slate-50"
                   href={explorerTransactionUrl(settlement.network, settlement.transaction)}
@@ -415,6 +560,10 @@ function DemoPaymentPlayground() {
                   <ExternalLink aria-hidden="true" className="h-4 w-4" />
                   Stellar transaction
                 </a>
+              ) : settlement?.dataMode === "simulation" && settlement?.transaction ? (
+                <div className="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                  <span>Simulated result (explorer links unavailable)</span>
+                </div>
               ) : null}
 
               {error ? (
@@ -472,10 +621,12 @@ function Fact({ label, value }: { label: string; value: string }) {
 
 function ResultPanel({
   label,
+  dataMode,
   rows,
   tone
 }: {
   label: string;
+  dataMode: PlaygroundDataMode;
   rows: Array<[string, string]>;
   tone: "success" | "warning" | "danger";
 }) {
@@ -483,7 +634,12 @@ function ResultPanel({
     <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
       <div className="mb-3 flex items-center justify-between gap-2">
         <p className="text-sm font-semibold text-slate-950">{label}</p>
-        <Badge tone={tone}>complete</Badge>
+        <div className="flex items-center gap-2">
+          <Badge tone={tone}>complete</Badge>
+          <Badge tone={dataMode === "live" ? "success" : "warning"}>
+            {dataMode === "live" ? "Live" : "Simulated"}
+          </Badge>
+        </div>
       </div>
       <dl className="space-y-2">
         {rows.map(([key, value]) => (
