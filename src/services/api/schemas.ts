@@ -1,6 +1,15 @@
 import { z } from "zod";
 
 import { networkIdSchema } from "@/config/networks";
+import {
+  isValidAbsoluteUrl,
+  isValidAssetCode,
+  isValidAtomicAmount,
+  isValidNetworkId,
+  isValidSorobanContractId,
+  isValidStellarAccountAddress,
+  isValidTimeoutSeconds
+} from "@/services/x402/validation";
 
 export const errorCodeSchema = z.enum([
   "PAYMENT_REQUIRED",
@@ -117,10 +126,23 @@ export const readinessSchema = z.object({
 export type Readiness = z.infer<typeof readinessSchema>;
 
 const supportedAssetSchema = z.object({
-  code: z.string(),
-  decimals: z.number(),
-  contractId: z.string().optional(),
-  issuer: z.string()
+  code: z
+    .string()
+    .refine(isValidAssetCode, "Asset code must be 1-12 alphanumeric characters"),
+  contractId: z
+    .string()
+    .refine(
+      isValidSorobanContractId,
+      "Contract ID must be a valid Soroban contract address (C followed by 55 base32 characters)"
+    )
+    .optional(),
+  decimals: z.number().int().min(0).max(7),
+  issuer: z
+    .string()
+    .refine(
+      isValidStellarAccountAddress,
+      "Issuer must be a valid Stellar account address"
+    )
 });
 
 export const networksSchema = z.object({
@@ -280,28 +302,65 @@ export const searchResultSchema = z.object({
 
 export type SearchResult = z.infer<typeof searchResultSchema>;
 
-export const exactPaymentRequirementsSchema = z.object({
-  amount: z.string().regex(/^[1-9]\d*$/),
-  asset: z.string().min(1),
-  extra: z
-    .record(z.string(), z.unknown())
-    .nullish()
-    .transform((value) => value ?? {}),
-  maxTimeoutSeconds: z.number().int().positive(),
-  network: networkIdSchema,
-  payTo: z.string(),
-  scheme: z.literal("exact")
-});
+export const exactPaymentRequirementsSchema = z
+  .object({
+    amount: z
+      .string()
+      .regex(/^[1-9]\d*$/)
+      .refine(
+        (value) => isValidAtomicAmount(value),
+        "Amount must be a positive integer without leading zeros"
+      ),
+    asset: z
+      .string()
+      .min(1, "Asset (contract ID) cannot be empty")
+      .refine(
+        (value) => isValidSorobanContractId(value),
+        "Asset must be a valid Soroban contract ID (C followed by 55 base32 characters)"
+      ),
+    extra: z
+      .record(z.string(), z.unknown())
+      .nullish()
+      .transform((value) => value ?? {}),
+    maxTimeoutSeconds: z
+      .number()
+      .int()
+      .positive()
+      .refine(
+        (value) => isValidTimeoutSeconds(value),
+        "Timeout must be a positive integer (1 to 604,800 seconds)"
+      ),
+    network: networkIdSchema.refine(
+      (value) => isValidNetworkId(value),
+      "Network must be 'stellar:testnet' or 'stellar:pubnet'"
+    ),
+    payTo: z
+      .string()
+      .min(1, "Recipient (payTo) cannot be empty")
+      .refine(
+        (value) => isValidStellarAccountAddress(value),
+        "Recipient must be a valid Stellar account address (G* or M* starting, 56 characters)"
+      ),
+    scheme: z.literal("exact")
+  })
+  .strict();
 
 export type ExactPaymentRequirements = z.infer<typeof exactPaymentRequirementsSchema>;
 
 export const paymentResourceSchema = z.object({
   description: z.string().optional(),
-  iconUrl: z.string().url().optional(),
+  iconUrl: z
+    .string()
+    .url()
+    .refine(isValidAbsoluteUrl, "Icon URL must be a valid absolute HTTP(S) URL")
+    .optional(),
   mimeType: z.string().optional(),
   serviceName: z.string().optional(),
   tags: z.array(z.string()).optional(),
-  url: z.string().url()
+  url: z
+    .string()
+    .url()
+    .refine(isValidAbsoluteUrl, "Resource URL must be a valid absolute HTTP(S) URL")
 });
 
 export const paymentRequiredV2Schema = z.object({
@@ -359,6 +418,17 @@ export const settlementRequestSchema = paymentPayloadSchema;
 
 export type SettlementRequest = z.infer<typeof settlementRequestSchema>;
 
+/**
+ * Stellar transaction hash schema validation.
+ * Stellar transaction hashes are always 64 hexadecimal characters (SHA-256).
+ * This pattern rejects synthetic identifiers like "upto-*" or other non-hex values.
+ */
+const stellarTransactionHashSchema = z
+  .string()
+  .regex(/^[a-f0-9]{64}$/i, {
+    message: "Transaction hash must be a 64-character hexadecimal string (Stellar transaction format)"
+  });
+
 export const settlementSchema = z.object({
   amount: z
     .string()
@@ -377,7 +447,7 @@ export const settlementSchema = z.object({
         receiptId: z.string(),
         settlementId: z.string(),
         status: z.literal("confirmed"),
-        transactionHash: z.string()
+        transactionHash: stellarTransactionHashSchema
       })
     })
     .optional(),
@@ -406,7 +476,7 @@ export const receiptSchema = z.object({
   sellerId: z.string().nullable(),
   settledAt: z.string().nullable(),
   status: z.enum(["pending", "finalized", "failed"]),
-  transactionHash: z.string().nullable(),
+  transactionHash: stellarTransactionHashSchema.nullable(),
   updatedAt: z.string()
 });
 

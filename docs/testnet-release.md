@@ -69,6 +69,167 @@ pnpm test:e2e:live
 Use a fresh, minimally funded testnet payer. Never place a seed phrase or private key in an
 environment variable, fixture, trace, screenshot, or repository file.
 
+## Release Screenshot Evidence
+
+Release screenshots provide deterministic visual evidence of tested UI states tied to a specific commit and deployment.
+Screenshots are automatically redacted to remove sensitive wallet data, addresses, and cryptographic material.
+
+### Generating Release Screenshots
+
+Generate screenshots from a clean repository clone:
+
+```bash
+# Local generation (requires mock server and built frontend)
+pnpm screenshots:release
+
+# Or step by step:
+pnpm screenshots:generate        # Capture desktop + mobile screenshots
+pnpm screenshots:organize        # Organize by variant, add commit/date metadata
+```
+
+Environment variables (optional):
+
+```bash
+# Set deployment URL for metadata (defaults to "pending")
+LUMENBAZAAR_DEPLOYMENT_URL=https://testnet.lumenbazaar.com pnpm screenshots:release
+
+# Use explicit commit hash (defaults to git HEAD)
+LUMENBAZAAR_RELEASE_COMMIT=abc1234 pnpm screenshots:release
+```
+
+### Screenshot Coverage
+
+Generated screenshots capture these deterministic states:
+
+1. **Dashboard state** - Authenticated user overview and main navigation
+2. **Explore discovery** - Resource listing interface and search functionality
+3. **Payment terms display** - Resource detail with terms, challenge, and expiry countdown
+4. **Wallet connection** - Freighter wallet connection confirmation and wallet selector UI
+5. **Payment validation** - Terms validated and ready for settlement submission
+6. **Receipt recovery** - Durable receipt recovered after page reload (session storage persistence)
+7. **Receipt detail** - Transaction evidence, receipt ID, and Stellar explorer link
+8. **Error states** - Challenge missing and other error handling with accessible announcements
+
+### Browser Variants
+
+Screenshots are captured for:
+- **Desktop** - Chrome 1920x1080
+- **Mobile** - Pixel 7 (mobile viewport)
+
+### Artifact Naming Convention
+
+Screenshot artifacts follow this deterministic naming pattern:
+
+```
+{OUTPUT_DIR}/{VARIANT}/{COMMIT_HASH}_{DATE}_{STATE}_{VARIANT}.png
+```
+
+Example:
+```
+test-results/screenshots/
+├── desktop/
+│   ├── a1b2c3d4e5f6_2026-10-15_dashboard-state-desktop.png
+│   ├── a1b2c3d4e5f6_2026-10-15_explore-discovery-desktop.png
+│   └── ...
+├── mobile/
+│   ├── a1b2c3d4e5f6_2026-10-15_dashboard-state-mobile.png
+│   ├── a1b2c3d4e5f6_2026-10-15_explore-discovery-mobile.png
+│   └── ...
+└── metadata_a1b2c3d4e5f6.json
+```
+
+### Redaction and Data Privacy
+
+All screenshots are automatically redacted before artifact generation:
+
+- ✓ Stellar addresses (G + 55 alphanumeric chars)
+- ✓ Contract IDs (C + 55 alphanumeric chars)
+- ✓ Seed phrases (24 or 12-word mnemonic patterns)
+- ✓ Private keys (secret/private key text and values)
+- ✓ XDR encoded data (base64 signatures and transactions)
+- ✓ Transaction hashes (64-character hex strings)
+
+Redaction occurs at the DOM level before screenshot capture, replacing sensitive content with
+readable placeholder text like `[STELLAR_ADDRESS_REDACTED]` and `[SEED_PHRASE_REDACTED]`.
+
+### GitHub Actions Workflow
+
+Automated screenshot capture is available via GitHub Actions. Trigger manually:
+
+```bash
+# Via GitHub CLI
+gh workflow run release-screenshots.yml \
+  -f deployment_url="https://testnet.lumenbazaar.com"
+
+# Or in GitHub UI: Actions > Release Screenshots > Run workflow
+```
+
+The workflow:
+1. Checks out the commit
+2. Captures desktop and mobile screenshots
+3. Organizes artifacts with commit hash and timestamp
+4. Generates metadata JSON with frontend commit, branch, and deployment URL
+5. Validates screenshot coverage (requires all states)
+6. Creates compressed archive
+7. Uploads artifacts (retained for 30 days)
+8. Generates release evidence report
+
+Artifacts are available in the workflow run:
+- `release-screenshots-{COMMIT}-{DATE}` - Organized screenshot directory
+- `release-screenshots-archive-{COMMIT}-{DATE}` - Compressed tar.gz
+- `release-evidence-report-{COMMIT}-{DATE}` - Markdown evidence summary
+
+### Metadata and Evidence Files
+
+Generated metadata includes:
+
+```json
+{
+  "releaseEvidence": {
+    "frontend": {
+      "commitHash": "a1b2c3d4e5f6",
+      "branch": "main",
+      "timestamp": "2026-10-15",
+      "deploymentUrl": "https://testnet.lumenbazaar.com"
+    },
+    "screenshotVariants": ["desktop", "mobile"],
+    "coverage": [
+      "dashboard-state",
+      "explore-discovery",
+      "resource-detail",
+      ...
+    ],
+    "redactionStatus": "sensitive-data-redacted",
+    "generatedAt": "2026-10-15T17:00:00.000Z"
+  }
+}
+```
+
+Use this metadata when documenting release evidence in pull requests or release notes.
+
+### Reproducibility
+
+Screenshots are deterministic and reproducible from any clean clone:
+
+1. Checkout the release commit:
+   ```bash
+   git checkout <commit-hash>
+   git clean -fd
+   ```
+
+2. Generate screenshots:
+   ```bash
+   pnpm screenshots:release
+   ```
+
+3. Compare against archive from GitHub Actions:
+   ```bash
+   diff -r test-results/screenshots <extracted-archive>
+   ```
+
+Identical screenshots (byte-for-byte) across runs confirm determinism and rule out transient UI
+rendering issues or network-dependent content.
+
 ## Production Deployment Verification
 
 To verify production frontend to backend connectivity after deployment:

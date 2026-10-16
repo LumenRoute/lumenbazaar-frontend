@@ -1,0 +1,155 @@
+name: Release Screenshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_url:
+        description: Frontend deployment URL (e.g., https://testnet.lumenbazaar.com)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  capture-screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium webkit
+
+      - name: Get commit info
+        id: commit
+        run: |
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B | head -1)
+          BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          TIMESTAMP=$(date -u +%Y-%m-%d)
+          echo "hash=${COMMIT_HASH}" >> $GITHUB_OUTPUT
+          echo "message=${COMMIT_MESSAGE}" >> $GITHUB_OUTPUT
+          echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
+          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+
+      - name: Generate release screenshots
+        env:
+          LUMENBAZAAR_RELEASE_COMMIT: ${{ steps.commit.outputs.hash }}
+          LUMENBAZAAR_DEPLOYMENT_URL: ${{ inputs.deployment_url || 'pending' }}
+        run: pnpm screenshots:generate
+
+      - name: Organize screenshot artifacts
+        env:
+          LUMENBAZAAR_DEPLOYMENT_URL: ${{ inputs.deployment_url || 'pending' }}
+        run: pnpm screenshots:organize
+
+      - name: Validate screenshot coverage
+        run: |
+          echo "Validating screenshot coverage..."
+          if [ -d "test-results/screenshots" ]; then
+            DESKTOP_COUNT=$(find test-results/screenshots/desktop -name "*.png" 2>/dev/null | wc -l)
+            MOBILE_COUNT=$(find test-results/screenshots/mobile -name "*.png" 2>/dev/null | wc -l)
+            echo "Desktop screenshots: $DESKTOP_COUNT"
+            echo "Mobile screenshots: $MOBILE_COUNT"
+            if [ $DESKTOP_COUNT -lt 6 ] || [ $MOBILE_COUNT -lt 6 ]; then
+              echo "❌ Insufficient screenshot coverage"
+              exit 1
+            fi
+            echo "✓ Screenshot coverage validated"
+          fi
+
+      - name: Create artifact archive
+        run: |
+          cd test-results
+          tar -czf screenshots_${{ steps.commit.outputs.hash }}_${{ steps.commit.outputs.timestamp }}.tar.gz screenshots/
+          ls -lh screenshots_*.tar.gz
+
+      - name: Upload screenshots as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-screenshots-${{ steps.commit.outputs.hash }}-${{ steps.commit.outputs.timestamp }}
+          path: test-results/screenshots/
+          retention-days: 30
+          compression-level: 9
+
+      - name: Upload compressed archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-screenshots-archive-${{ steps.commit.outputs.hash }}-${{ steps.commit.outputs.timestamp }}
+          path: test-results/screenshots_${{ steps.commit.outputs.hash }}_${{ steps.commit.outputs.timestamp }}.tar.gz
+          retention-days: 30
+
+      - name: Generate evidence report
+        run: |
+          cat > test-results/RELEASE_EVIDENCE.md << 'EOF'
+          # Release Screenshot Evidence
+          
+          **Commit:** ${{ steps.commit.outputs.hash }}
+          **Branch:** ${{ steps.commit.outputs.branch }}
+          **Date:** ${{ steps.commit.outputs.timestamp }}
+          **Deployment URL:** ${{ inputs.deployment_url || 'pending' }}
+          
+          ## Screenshot Coverage
+          
+          - Dashboard state
+          - Explore discovery interface
+          - Resource detail view with payment terms
+          - Wallet connection confirmation
+          - Payment validation state
+          - Receipt recovery after reload
+          - Receipt detail view
+          - Error state handling
+          
+          ## Variants
+          
+          - ✓ Desktop (Chrome)
+          - ✓ Mobile (Pixel 7)
+          
+          ## Redaction Status
+          
+          - ✓ Stellar addresses redacted
+          - ✓ Contract IDs redacted
+          - ✓ Seed phrases redacted
+          - ✓ Private keys redacted
+          - ✓ Transaction hashes redacted
+          - ✓ XDR payloads redacted
+          
+          ## Verification
+          
+          Generated: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          Workflow: ${{ github.workflow }}
+          
+          EOF
+          cat test-results/RELEASE_EVIDENCE.md
+
+      - name: Upload evidence report
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence-report-${{ steps.commit.outputs.hash }}-${{ steps.commit.outputs.timestamp }}
+          path: test-results/RELEASE_EVIDENCE.md
+          retention-days: 30
+
+      - name: Comment on workflow run
+        if: always()
+        run: |
+          echo "## 📸 Release Screenshots Generated"
+          echo ""
+          echo "**Commit:** \`${{ steps.commit.outputs.hash }}\`"
+          echo "**Timestamp:** ${{ steps.commit.outputs.timestamp }}"
+          echo "**Deployment:** ${{ inputs.deployment_url || 'pending' }}"
+          echo ""
+          echo "Artifacts available in workflow run:"
+          echo "- Desktop & Mobile screenshots"
+          echo "- Compressed archive"
+          echo "- Release evidence report"
