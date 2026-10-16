@@ -15,8 +15,10 @@ import {
   type SignedPaymentAuthorization
 } from "@/services/x402/authorization";
 import {
+  challengeSecondsRemaining,
   ChallengeError,
   expectedTermsForResource,
+  isChallengeExpired,
   requestPaymentChallenge,
   type ValidatedPaymentChallenge
 } from "@/services/x402/challenge";
@@ -42,8 +44,27 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
   const [isPaying, setIsPaying] = useState(false);
   const [flowState, setFlowState] = useState<PaidFlowState>();
   const [outcome, setOutcome] = useState<PaidFlowOutcome>();
+  const [secondsRemaining, setSecondsRemaining] = useState<number | undefined>(undefined);
   const fingerprint = useRef<string | undefined>(undefined);
   const paymentLocked = outcome?.state === "pending" || outcome?.state === "indeterminate";
+  const isExpired = secondsRemaining !== undefined && secondsRemaining === 0;
+
+  // Drive a per-second countdown while a challenge is live.
+  useEffect(() => {
+    if (challenge === undefined) {
+      setSecondsRemaining(undefined);
+      return;
+    }
+
+    // Compute and set immediately so the display is accurate before the first tick.
+    setSecondsRemaining(challengeSecondsRemaining(challenge));
+
+    const id = setInterval(() => {
+      setSecondsRemaining(challengeSecondsRemaining(challenge));
+    }, 1_000);
+
+    return () => clearInterval(id);
+  }, [challenge]);
 
   useEffect(() => {
     if (source !== "api") return;
@@ -57,8 +78,13 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
   async function requestTerms() {
     setError(undefined);
     setAuthorization(undefined);
+    setChallenge(undefined);
     setFlowState(undefined);
     setOutcome(undefined);
+    setSecondsRemaining(undefined);
+    // Reset stale authorization fingerprint so the previous signed state cannot
+    // be accidentally reused after a refresh.
+    fingerprint.current = undefined;
     setIsLoading(true);
     try {
       const supported = await apiClient.getSupported();
@@ -92,6 +118,13 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
 
   async function authorize() {
     if (challenge === undefined) return;
+    // Prevent expired challenges from reaching wallet signing.
+    if (isChallengeExpired(challenge)) {
+      setError(
+        "CHALLENGE_EXPIRED: The payment challenge expired. Refresh terms before continuing."
+      );
+      return;
+    }
     setError(undefined);
     setAuthorization(undefined);
     setIsSigning(true);
@@ -172,10 +205,41 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone="success">Validated x402 v2 exact</Badge>
-              <span className="text-xs text-slate-500">
-                Expires {new Date(challenge.expiresAt).toLocaleString()}
-              </span>
+              {secondsRemaining !== undefined && !isExpired ? (
+                <span
+                  className={
+                    secondsRemaining <= 30
+                      ? "text-xs font-medium text-amber-700"
+                      : "text-xs text-slate-500"
+                  }
+                  aria-live="polite"
+                  aria-label={`Challenge expires in ${secondsRemaining} seconds`}
+                >
+                  Expires in {secondsRemaining}s
+                </span>
+              ) : (
+                <span className="text-xs text-slate-500">
+                  Expires {new Date(challenge.expiresAt).toLocaleString()}
+                </span>
+              )}
             </div>
+            {secondsRemaining !== undefined && secondsRemaining <= 30 && !isExpired ? (
+              <div
+                className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+                role="alert"
+              >
+                Challenge expires in {secondsRemaining} second{secondsRemaining === 1 ? "" : "s"}.
+                Refresh terms to continue.
+              </div>
+            ) : null}
+            {isExpired ? (
+              <div
+                className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+                role="alert"
+              >
+                This challenge has expired. Refresh terms to request a new one.
+              </div>
+            ) : null}
             <dl className="grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-3">
               <Field label="Network" value={challenge.requirement.network} />
               <Field label="Atomic amount" value={challenge.requirement.amount} />
@@ -199,7 +263,11 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
                 </div>
               )}
               {authorization === undefined ? (
-                <Button disabled={isSigning} onClick={() => void authorize()} type="button">
+                <Button
+                  disabled={isSigning || isExpired}
+                  onClick={() => void authorize()}
+                  type="button"
+                >
                   <WalletCards aria-hidden="true" className="h-4 w-4" />
                   {isSigning ? "Authorizing" : "Authorize payment"}
                 </Button>

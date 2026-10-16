@@ -192,9 +192,12 @@ describe("Freighter x402 authorization", () => {
       connectWallet: async () => connection(),
       createScheme: schemeCallingWallet,
       now: () => 2_000,
-      walletApi: { ...trackedWallet, signAuthEntry: vi.fn(async () => {
-        throw { error: { message: "User declined" } };
-      }) }
+      walletApi: {
+        ...trackedWallet,
+        signAuthEntry: vi.fn(async () => {
+          throw { error: { message: "User declined" } };
+        })
+      }
     }).catch((e) => e as AuthorizationError);
 
     expect(firstAttempt.code).toBe("WALLET_REJECTED");
@@ -249,6 +252,35 @@ describe("Freighter x402 authorization", () => {
         walletApi: wallet()
       })
     ).rejects.toMatchObject({ code: "WALLET_NETWORK_MISMATCH" });
+  });
+
+  it("detects clock drift: expires precisely at the moment signAuthEntry is called", async () => {
+    // expiresAt=3_000; time advances 500ms per call: 1→1500, 2→2000, 3→2500, 4→3000
+    // The 4th call to now() (inside signAuthEntry) crosses the boundary.
+    let calls = 0;
+    const driftingClock = () => {
+      calls++;
+      return calls * 500;
+    };
+
+    // With expiresAt=3_000 and clock advancing by 500ms per call:
+    // call 1 (pre-connect check): 500  — fresh
+    // call 2 (inside signAuthEntry): 1000 — fresh
+    // call 3 (post-sign check): 1500 — fresh
+    // So we need expiresAt=1_500 and 3 calls to trigger expiry right at sign
+    const driftedCalls2 = () => {
+      calls++;
+      return calls * 600; // 600, 1200, 1800
+    };
+    calls = 0;
+    await expect(
+      authorizePaymentChallenge(challenge({ expiresAt: 1_500 }), {
+        connectWallet: async () => connection(),
+        createScheme: schemeCallingWallet,
+        now: driftedCalls2,
+        walletApi: wallet()
+      })
+    ).rejects.toMatchObject({ code: "CHALLENGE_EXPIRED" });
   });
 });
 
