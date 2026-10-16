@@ -30,6 +30,8 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm check
       - run: pnpm test:e2e
+      - name: Run accessibility tests (desktop + mobile)
+        run: pnpm test:e2e:a11y
 
   check-generated-code:
     runs-on: ubuntu-latest
