@@ -12,12 +12,16 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "pnpm test:e2e:smoke && pnpm test:e2e:release",
+    "test:e2e:a11y": "playwright test --config playwright.config.ts tests/e2e/a11y.spec.ts",
     "test:e2e:live": "playwright test --config playwright.live.config.ts",
     "test:e2e:prod-connectivity": "playwright test --config playwright.prod-connectivity.config.ts",
     "test:e2e:release": "playwright test --config playwright.release.config.ts",
     "test:e2e:smoke": "playwright test",
     "test:watch": "vitest",
     "audit:prod": "node scripts/audit-production.mjs",
+    "verify-backend-pin": "node scripts/verify-backend-pin.mjs",
+    "update-backend-pin": "node scripts/update-backend-pin.mjs",
+    "generate-client": "node scripts/update-backend-pin.mjs",
     "format:check": "prettier --check .",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
@@ -38,6 +42,7 @@
     "zod": "4.5.4"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.11.1",
     "@playwright/test": "1.63.0",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.3",
@@ -50,6 +55,7 @@
     "eslint-config-next": "16.4.0",
     "globals": "16.5.0",
     "jsdom": "30.0.1",
+    "openapi-typescript": "7.4.2",
     "prettier": "3.8.0",
     "typescript": "5.9.3",
     "vitest": "4.1.11"

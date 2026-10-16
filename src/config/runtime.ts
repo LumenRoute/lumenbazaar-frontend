@@ -15,6 +15,7 @@ const rawPublicEnvSchema = z.object({
     .enum(["true", "false"])
     .default("true")
     .transform((value) => value === "true"),
+  NEXT_PUBLIC_ENABLE_TELEMETRY: booleanFlagSchema,
   NEXT_PUBLIC_ENABLE_UPTO_SESSIONS: booleanFlagSchema,
   NEXT_PUBLIC_LUMENBAZAAR_API_URL: z.string().url().default("http://localhost:8080"),
   NEXT_PUBLIC_LUMENBAZAAR_DEFAULT_NETWORK: networkIdSchema.default("stellar:testnet"),
@@ -26,6 +27,7 @@ export type RuntimeEnvironment = z.infer<typeof runtimeEnvironmentSchema>;
 export type FeatureFlags = {
   enableMainnet: boolean;
   enableMcpInspector: boolean;
+  enableTelemetry: boolean;
   enableUptoSessions: boolean;
 };
 
@@ -63,6 +65,7 @@ export function loadRuntimeConfig(
     features: {
       enableMainnet: parsed.data.NEXT_PUBLIC_ENABLE_MAINNET,
       enableMcpInspector: parsed.data.NEXT_PUBLIC_ENABLE_MCP_INSPECTOR,
+      enableTelemetry: parsed.data.NEXT_PUBLIC_ENABLE_TELEMETRY,
       enableUptoSessions: parsed.data.NEXT_PUBLIC_ENABLE_UPTO_SESSIONS
     },
     networks: stellarNetworks
@@ -73,6 +76,7 @@ function bundledPublicEnvironment() {
   return {
     NEXT_PUBLIC_ENABLE_MAINNET: process.env.NEXT_PUBLIC_ENABLE_MAINNET,
     NEXT_PUBLIC_ENABLE_MCP_INSPECTOR: process.env.NEXT_PUBLIC_ENABLE_MCP_INSPECTOR,
+    NEXT_PUBLIC_ENABLE_TELEMETRY: process.env.NEXT_PUBLIC_ENABLE_TELEMETRY,
     NEXT_PUBLIC_ENABLE_UPTO_SESSIONS: process.env.NEXT_PUBLIC_ENABLE_UPTO_SESSIONS,
     NEXT_PUBLIC_LUMENBAZAAR_API_URL: process.env.NEXT_PUBLIC_LUMENBAZAAR_API_URL,
     NEXT_PUBLIC_LUMENBAZAAR_DEFAULT_NETWORK: process.env.NEXT_PUBLIC_LUMENBAZAAR_DEFAULT_NETWORK,

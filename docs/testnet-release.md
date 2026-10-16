@@ -112,6 +112,71 @@ The connectivity test runs on both desktop and mobile browsers.
    confirm the same receipt is recovered. Record the UTC time, frontend/backend commits, resource ID,
    receipt ID, transaction hash, and result in the release evidence.
 
+## Telemetry
+
+### Privacy-Safe Telemetry (Operational Only)
+
+LumenBazaar frontend collects operational telemetry **only when explicitly enabled** via the `NEXT_PUBLIC_ENABLE_TELEMETRY` environment variable.
+
+**What Is Collected (when enabled):**
+- Event type and timestamp
+- Session ID (opaque, random, non-wallet-specific)
+- Network ID (stellar:testnet or stellar:pubnet)
+- Deployment ID (optional hash of API endpoint for correlation)
+- Event-specific bounded fields:
+  - Wallet connection status (initiated, success/failure) with bounded error codes only
+  - Payment verification, authorization, settlement timings (duration in milliseconds, capped at 5 minutes)
+  - Resource fetch status and duration
+  - UI error categories (bounded, non-sensitive)
+  - Asset codes (alphanumeric, max 12 characters)
+
+**What Is NEVER Collected:**
+- Wallet addresses or accounts
+- Private keys, seed phrases, or any cryptographic material
+- Payment signatures or signed XDR
+- Authorization entries or headers
+- Transaction hashes or receipt IDs
+- Raw error messages, stack traces, or response bodies
+- Free-form user input or resource details
+- Any nested or encoded sensitive data
+
+**Validation and Redaction:**
+1. Only allowlisted fields per event type are extracted
+2. All collected fields are validated against strict bounds (enums, integer ranges, string patterns)
+3. Two-layer defense: allowlist validation + pattern detection for sensitive data
+4. Oversized payloads (>10 KB) are rejected
+5. Any event containing sensitive data patterns is dropped without emission
+
+**Enabling Telemetry:**
+
+Set the environment variable on the frontend host:
+
+```bash
+NEXT_PUBLIC_ENABLE_TELEMETRY=true
+```
+
+Leave unset or set to `false` to disable (default):
+
+```bash
+NEXT_PUBLIC_ENABLE_TELEMETRY=false
+# or omit entirely
+```
+
+**Testing Telemetry is Off:**
+
+1. In development, set `NODE_ENV=development` and `NEXT_PUBLIC_ENABLE_TELEMETRY=false`, then open browser DevTools console.
+2. Look for `[Telemetry Internal]` messages; if absent, telemetry is disabled.
+3. In production, telemetry is disabled by default. No `NEXT_PUBLIC_ENABLE_TELEMETRY=true` means no collection.
+
+**Sink Interface:**
+
+The telemetry service uses a replaceable sink interface:
+- `NoOpSink` (default when disabled): silently discards events
+- `ConsoleSink` (development): logs events to console with `[Telemetry]` prefix
+- Future sinks (e.g., `RemoteSink`) can be added without changing the telemetry API
+
+Events sent to sinks are pre-validated and redacted; sinks do not perform additional filtering.
+
 ## Known Limitations
 
 - Gate C remains pending until the frontend and Phase 24 backend are deployed and the external

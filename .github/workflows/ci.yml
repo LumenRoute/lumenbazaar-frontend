@@ -30,3 +30,26 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm check
       - run: pnpm test:e2e
+      - name: Run accessibility tests (desktop + mobile)
+        run: pnpm test:e2e:a11y
+
+  check-generated-code:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify backend pin checksum
+        run: pnpm run verify-backend-pin
+      - name: Regenerate client from pinned OpenAPI
+        run: pnpm run generate-client
+      - name: Check for stale generated code
+        run: git diff --exit-code -- src/services/api/client.generated.ts
+      - name: Type check for API compatibility
+        run: pnpm typecheck
