@@ -40,12 +40,22 @@ pnpm test:e2e
 pnpm audit:prod
 ```
 
-`pnpm test:e2e` runs the demo smoke suite and a testnet-mode release suite on desktop and mobile.
-The release suite uses the production resource and payment components against an isolated HTTP
-contract server. It simulates the paid-resource response and Freighter message boundary; it covers
-discovery, canonical challenge display, wallet connection, durable receipt recovery, explorer
-evidence, keyboard activation, error announcement, and long-value layout. It is not evidence of a
-real signature or settlement.
+`pnpm test:e2e` runs three suites:
+
+1. **Demo smoke suite** (`tests/e2e/*.spec.ts` except connectivity): Local dev server with demo fixtures.
+   Validates UI rendering, navigation, and event handling.
+
+2. **Release suite** (`tests/release-e2e/`): Deterministic release gate using a mock HTTP server.
+   Uses the production resource and payment components against an isolated contract server.
+   Simulates the paid-resource response and Freighter message boundary; covers discovery,
+   canonical challenge display, wallet connection, durable receipt recovery, explorer evidence,
+   keyboard activation, error announcement, and long-value layout. It is not evidence of a
+   real signature or settlement.
+
+3. **Production connectivity suite** (`tests/e2e/connectivity.spec.ts`): Deployed frontend to backend.
+   Verifies the frontend reaches the configured backend API without CORS failures.
+   Asserts health, networks, resources, and conformance endpoints respond with valid schemas.
+   Captures frontend and backend commit identifiers for release evidence.
 
 The external gate makes no `page.route` calls and cannot pass on successful fixture interception:
 
@@ -58,6 +68,34 @@ pnpm test:e2e:live
 
 Use a fresh, minimally funded testnet payer. Never place a seed phrase or private key in an
 environment variable, fixture, trace, screenshot, or repository file.
+
+## Production Deployment Verification
+
+To verify production frontend to backend connectivity after deployment:
+
+```powershell
+$env:LUMENBAZAAR_PROD_FRONTEND_URL = "https://<deployed-frontend-url>"
+pnpm test:e2e:prod-connectivity
+```
+
+This runs the production connectivity smoke suite against the deployed frontend and its configured
+backend API. The test:
+
+- Reaches the configured backend URL from the deployed frontend
+- Validates `/ready` reports `ok: true` and `capabilities.exact: true`
+- Validates `/v1/supported` includes a version 2 `exact` kind for the network
+- Validates `/v1/discovery/search` returns resources with correct schema
+- Validates `/openapi.json` or `/version` documents API compliance
+- Detects CORS failures and schema violations
+- Captures frontend and backend commit identifiers for evidence
+
+If the test fails, check:
+1. `NEXT_PUBLIC_LUMENBAZAAR_API_URL` is set correctly on Vercel
+2. Backend API is deployed and accessible
+3. CORS headers permit requests from the frontend domain
+4. API endpoints respond with required schema fields
+
+The connectivity test runs on both desktop and mobile browsers.
 
 ## Five-Minute Reviewer Script
 

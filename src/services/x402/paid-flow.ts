@@ -85,6 +85,23 @@ const recoverySchema = z.object({
   stage: z.enum(["verified", "submitted"]),
   transactionHash: z.string().min(1).optional(),
   updatedAt: z.string().datetime()
+  /**
+   * SECURITY NOTE: RecoveryRecord whitelist
+   * 
+   * This schema intentionally EXCLUDES sensitive fields:
+   * - NO: paymentSignatureHeader (PAYMENT-SIGNATURE)
+   * - NO: signedAuthEntry or signedXdr
+   * - NO: paymentPayload (signed transaction envelope)
+   * - NO: walletAddress or private key material
+   * 
+   * Only includes safe identifiers for recovery:
+   * - IDs: paymentAttemptId, correlationId, receiptId, resourceId
+   * - Public data: amount, asset, network, recipient (payTo), transactionHash
+   * - Metadata: stage, updatedAt
+   * 
+   * Recovery metadata is stored in sessionStorage (cleared on browser close)
+   * and never persists beyond the current session.
+   */
 });
 
 type RecoveryRecord = z.infer<typeof recoverySchema>;
