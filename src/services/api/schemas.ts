@@ -359,6 +359,17 @@ export const settlementRequestSchema = paymentPayloadSchema;
 
 export type SettlementRequest = z.infer<typeof settlementRequestSchema>;
 
+/**
+ * Stellar transaction hash schema validation.
+ * Stellar transaction hashes are always 64 hexadecimal characters (SHA-256).
+ * This pattern rejects synthetic identifiers like "upto-*" or other non-hex values.
+ */
+const stellarTransactionHashSchema = z
+  .string()
+  .regex(/^[a-f0-9]{64}$/i, {
+    message: "Transaction hash must be a 64-character hexadecimal string (Stellar transaction format)"
+  });
+
 export const settlementSchema = z.object({
   amount: z
     .string()
@@ -377,7 +388,7 @@ export const settlementSchema = z.object({
         receiptId: z.string(),
         settlementId: z.string(),
         status: z.literal("confirmed"),
-        transactionHash: z.string()
+        transactionHash: stellarTransactionHashSchema
       })
     })
     .optional(),
@@ -406,7 +417,7 @@ export const receiptSchema = z.object({
   sellerId: z.string().nullable(),
   settledAt: z.string().nullable(),
   status: z.enum(["pending", "finalized", "failed"]),
-  transactionHash: z.string().nullable(),
+  transactionHash: stellarTransactionHashSchema.nullable(),
   updatedAt: z.string()
 });
 
