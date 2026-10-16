@@ -64,7 +64,8 @@ environment variable, fixture, trace, screenshot, or repository file.
 1. Open the pinned frontend URL in a signed-out browser profile and confirm the header says
    `testnet mode`, not `Demo data`.
 2. Open Explore, select the active paid resource, request terms, and compare network, atomic amount,
-   asset contract, recipient, resource URL, and expiry with the resource owner.
+   asset contract, recipient, resource URL, and expiry with the resource owner. Confirm the live
+   countdown appears and that the amber warning banner shows at or below 30 seconds remaining.
 3. Connect a fresh Freighter testnet wallet, authorize once, and reject any prompt whose account,
    network, or terms differ from the reviewed values.
 4. Submit the paid request once. Confirm the UI progresses through verification, paid resource call,
@@ -77,6 +78,9 @@ environment variable, fixture, trace, screenshot, or repository file.
 
 - Gate C remains pending until the frontend and Phase 24 backend are deployed and the external
   fresh-wallet run succeeds.
+- The countdown display and expiry banners use `aria-live="polite"` and are readable by screen
+  readers. On mobile, the countdown appears inline next to the "Validated x402 v2 exact" badge and
+  wraps naturally in narrow viewports. No additional mobile-specific styling is required.
 - The backend contract does not expose payment-attempt or seller-payment collection endpoints, so
   those live pages report the capability as unavailable instead of displaying fixtures.
 - Mainnet is disabled. No testnet result is evidence of mainnet readiness.

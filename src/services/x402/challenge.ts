@@ -193,6 +193,17 @@ export function isChallengeExpired(
   return now >= challenge.expiresAt;
 }
 
+/**
+ * Returns the whole seconds remaining until the challenge expires, clamped to zero.
+ * Pass a synthetic `now` for testable clock injection.
+ */
+export function challengeSecondsRemaining(
+  challenge: Pick<ValidatedPaymentChallenge, "expiresAt">,
+  now = Date.now()
+): number {
+  return Math.max(0, Math.ceil((challenge.expiresAt - now) / 1_000));
+}
+
 function decodeChallenge(encoded: string): PaymentRequiredV2 {
   try {
     const decoded = decodePaymentRequiredHeader(encoded);
