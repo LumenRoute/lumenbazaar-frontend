@@ -26,6 +26,12 @@ pnpm check
 pnpm test:e2e
 ```
 
+### Backend API Contract
+
+The frontend types are generated from the backend OpenAPI specification pinned at a specific backend commit to prevent schema drift. Generated types are wired to hand-maintained validators using compile-time type assertions.
+
+For details on the pinning mechanism, how to update the pin, and what CI enforces, see [docs/backend-pin.md](docs/backend-pin.md).
+
 ## Environment
 
 Copy `.env.example` to `.env.local` for local overrides.
