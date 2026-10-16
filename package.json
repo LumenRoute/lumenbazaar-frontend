@@ -14,6 +14,7 @@
     "test:e2e": "pnpm test:e2e:smoke && pnpm test:e2e:release",
     "test:e2e:a11y": "playwright test --config playwright.config.ts tests/e2e/a11y.spec.ts",
     "test:e2e:live": "playwright test --config playwright.live.config.ts",
+    "test:e2e:prod-connectivity": "playwright test --config playwright.prod-connectivity.config.ts",
     "test:e2e:release": "playwright test --config playwright.release.config.ts",
     "test:e2e:smoke": "playwright test",
     "test:watch": "vitest",

@@ -6,8 +6,10 @@ import type { Resource, SupportedPaymentSchemes } from "@/services/api/schemas";
 
 import {
   assertChallengeFresh,
+  challengeSecondsRemaining,
   ChallengeError,
   expectedTermsForResource,
+  isChallengeExpired,
   requestPaymentChallenge,
   type ExpectedChallengeTerms
 } from "./challenge";
@@ -193,6 +195,39 @@ describe("x402 v2 challenge handling", () => {
       })
     ).rejects.toMatchObject({ code: "CHALLENGE_MISMATCH" });
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("challengeSecondsRemaining", () => {
+  it("returns the whole seconds until expiry, rounded up", () => {
+    expect(challengeSecondsRemaining({ expiresAt: 60_000 }, 59_001)).toBe(1);
+    expect(challengeSecondsRemaining({ expiresAt: 60_000 }, 59_000)).toBe(1);
+    expect(challengeSecondsRemaining({ expiresAt: 60_000 }, 58_001)).toBe(2);
+    expect(challengeSecondsRemaining({ expiresAt: 60_000 }, 0)).toBe(60);
+  });
+
+  it("clamps to zero when the challenge has already expired", () => {
+    expect(challengeSecondsRemaining({ expiresAt: 60_000 }, 60_000)).toBe(0);
+    expect(challengeSecondsRemaining({ expiresAt: 60_000 }, 60_001)).toBe(0);
+    expect(challengeSecondsRemaining({ expiresAt: 60_000 }, 999_999)).toBe(0);
+  });
+
+  it("returns zero exactly at the expiry boundary (clock drift edge)", () => {
+    const expiresAt = 100_000;
+    // One millisecond before: still alive
+    expect(challengeSecondsRemaining({ expiresAt }, expiresAt - 1)).toBe(1);
+    // Exactly at expiry: zero
+    expect(challengeSecondsRemaining({ expiresAt }, expiresAt)).toBe(0);
+  });
+
+  it("correctly handles a 1-second window remaining after clock drift", () => {
+    // Challenge was issued with a 60s window.  Network round-trip consumed 59.5s.
+    const issuedAt = 1_000;
+    const maxTimeoutSeconds = 60;
+    const expiresAt = issuedAt + maxTimeoutSeconds * 1_000; // 61_000
+    const clockDriftNow = 60_001; // 999ms before expiry
+    expect(challengeSecondsRemaining({ expiresAt }, clockDriftNow)).toBe(1);
+    expect(isChallengeExpired({ expiresAt }, clockDriftNow)).toBe(false);
   });
 });
 

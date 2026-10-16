@@ -14,6 +14,24 @@ import { assertChallengeFresh, type ValidatedPaymentChallenge } from "./challeng
 
 export const paymentSignatureHeader = "PAYMENT-SIGNATURE";
 
+/**
+ * SECURITY NOTE: Signed authorization data handling
+ *
+ * This module handles sensitive Freighter wallet signing operations.
+ * Security properties maintained:
+ * - Signed authorization entries (signedAuthEntry) are never logged or persisted
+ * - PAYMENT-SIGNATURE headers are constructed in memory only
+ * - Error messages exclude any signed payload or XDR data
+ * - No wallet responses are stored in sessionStorage or logs
+ * - All sensitive keys are filtered out before UI display via redactSensitivePaymentData()
+ *
+ * Recovery mechanism (via paid-flow.ts) stores only non-sensitive identifiers:
+ * - Payment attempt ID, correlation ID, receipt ID
+ * - Amount and asset identifiers (public information)
+ * - Transaction hash and network (public information)
+ * - NO: signed payloads, headers, XDR, or key material
+ */
+
 export type AuthorizationErrorCode =
   | "AUTHORIZATION_FAILED"
   | "CHALLENGE_EXPIRED"
