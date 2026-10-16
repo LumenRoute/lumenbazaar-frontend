@@ -14,6 +14,8 @@ import { isDemoMode, loadRuntimeConfig } from "@/config/runtime";
 import {
   explorerTransactionUrl,
   formatPaymentAmount,
+  isSyntheticTransactionId,
+  isValidTransactionHash,
   loadPaymentActivity,
   paymentActivityStatus,
   shortHash,
@@ -317,15 +319,27 @@ function TransactionRow({ activity }: { activity: PaymentActivity }) {
             </Link>
           ) : null}
           {transactionHash ? (
-            <a
-              className="inline-flex min-h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-2 text-slate-700 hover:bg-slate-50"
-              href={explorerTransactionUrl(activity.attempt.network, transactionHash)}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <ExternalLink aria-hidden="true" className="h-4 w-4" />
-              {shortHash(transactionHash)}
-            </a>
+            isSyntheticTransactionId(transactionHash) ? (
+              <div className="inline-flex min-h-9 items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2 text-amber-700">
+                <span className="text-xs font-medium">Simulation</span>
+                <span className="text-sm font-mono">{shortHash(transactionHash)}</span>
+              </div>
+            ) : isValidTransactionHash(transactionHash) ? (
+              <a
+                className="inline-flex min-h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-2 text-slate-700 hover:bg-slate-50"
+                href={explorerTransactionUrl(activity.attempt.network, transactionHash) || ""}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <ExternalLink aria-hidden="true" className="h-4 w-4" />
+                {shortHash(transactionHash)}
+              </a>
+            ) : (
+              <div className="inline-flex min-h-9 items-center gap-2 rounded-md border border-red-300 bg-red-50 px-2 text-red-700">
+                <span className="text-xs font-medium">Invalid</span>
+                <span className="text-sm font-mono">{shortHash(transactionHash)}</span>
+              </div>
+            )
           ) : (
             <span className="text-slate-500">Pending</span>
           )}

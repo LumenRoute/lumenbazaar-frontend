@@ -2,7 +2,7 @@ import { ExternalLink } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { explorerTransactionUrl, isValidTransactionHash } from "@/services/payments";
+import { explorerTransactionUrl, isValidTransactionHash, isSyntheticTransactionId } from "@/services/payments";
 import type { Receipt } from "@/services/api/schemas";
 
 type ReceiptDetailSummaryProps = {
@@ -99,7 +99,23 @@ export function ReceiptDetailSummary({ receipt }: ReceiptDetailSummaryProps) {
         </Card>
       )}
 
-      {isFinalized && receipt.transactionHash && !isValidTransactionHash(receipt.transactionHash) && (
+      {isFinalized && receipt.transactionHash && isSyntheticTransactionId(receipt.transactionHash) && (
+        <Card>
+          <CardHeader>
+            <h2 className="text-lg font-semibold text-slate-950">Simulation data</h2>
+          </CardHeader>
+          <CardBody className="space-y-4 text-sm">
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="font-medium text-amber-900">This is test or simulation data, not a real on-chain transaction.</p>
+              <p className="mt-1 text-amber-800">
+                Synthetic identifiers like "<code className="font-mono">{receipt.transactionHash}</code>" cannot be verified on the Stellar explorer.
+              </p>
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {isFinalized && receipt.transactionHash && !isValidTransactionHash(receipt.transactionHash) && !isSyntheticTransactionId(receipt.transactionHash) && (
         <Card>
           <CardHeader>
             <h2 className="text-lg font-semibold text-slate-950">Finality confirmation</h2>

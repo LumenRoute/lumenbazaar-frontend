@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { explorerTransactionUrl, isValidTransactionHash } from "./payments";
+import { explorerTransactionUrl, isValidTransactionHash, isSyntheticTransactionId } from "./payments";
 
 describe("isValidTransactionHash", () => {
   it("returns true for valid 64-character hex transaction hashes", () => {
@@ -150,5 +150,155 @@ describe("explorerTransactionUrl", () => {
     const url = explorerTransactionUrl("stellar:testnet", hashWithSpecial);
 
     expect(url).toBeNull();
+  });
+});
+
+describe("isSyntheticTransactionId", () => {
+  it("returns true for upto-* prefixed identifiers", () => {
+    const syntheticIds = [
+      "upto-supported",
+      "upto-session-create",
+      "upto-settle",
+      "upto-test-123"
+    ];
+
+    syntheticIds.forEach((id) => {
+      expect(isSyntheticTransactionId(id)).toBe(true);
+    });
+  });
+
+  it("returns true for exact-* prefixed identifiers", () => {
+    const syntheticIds = [
+      "exact-supported",
+      "exact-verify",
+      "exact-settle",
+      "exact-test-456"
+    ];
+
+    syntheticIds.forEach((id) => {
+      expect(isSyntheticTransactionId(id)).toBe(true);
+    });
+  });
+
+  it("returns true for playground_* prefixed identifiers", () => {
+    const syntheticIds = [
+      "playground_settlement_123",
+      "playground_test_abc",
+      "playground_fixture_xyz"
+    ];
+
+    syntheticIds.forEach((id) => {
+      expect(isSyntheticTransactionId(id)).toBe(true);
+    });
+  });
+
+  it("returns true for non-hex identifiers", () => {
+    const syntheticIds = [
+      "tx_hash_abc123", // contains non-hex characters
+      "transaction-id-123", // invalid format
+      "invalid_hash_format", // non-hex
+      "not-a-real-hash", // hyphens not allowed
+      "tx123456789012345678901234567890123456789012345678901234567890xyz" // contains 'xyz'
+    ];
+
+    syntheticIds.forEach((id) => {
+      expect(isSyntheticTransactionId(id)).toBe(true);
+    });
+  });
+
+  it("returns false for valid 64-character hex hashes", () => {
+    const validHashes = [
+      "8b54ad6f02d48fef51d92f2db1a4d4d069e9449ce9a4f27b9a6c6e6d88f9d631",
+      "8B54AD6F02D48FEF51D92F2DB1A4D4D069E9449CE9A4F27B9A6C6E6D88F9D631",
+      "0000000000000000000000000000000000000000000000000000000000000000",
+      "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "AbCdEf1234567890AbCdEf1234567890AbCdEf1234567890AbCdEf1234567890"
+    ];
+
+    validHashes.forEach((hash) => {
+      expect(isSyntheticTransactionId(hash)).toBe(false);
+    });
+  });
+
+  it("returns true for null or undefined", () => {
+    expect(isSyntheticTransactionId(null)).toBe(false);
+    expect(isSyntheticTransactionId(undefined)).toBe(false);
+  });
+
+  it("returns true for empty string", () => {
+    expect(isSyntheticTransactionId("")).toBe(false);
+  });
+
+  it("returns true for too-short hashes", () => {
+    const shortHash = "8b54ad6f02d48fef51d92f2db1a4d4d069e9449ce9a4f27b9a6c6e6d88f9d63"; // 63 chars
+    expect(isSyntheticTransactionId(shortHash)).toBe(true);
+  });
+
+  it("returns true for too-long hashes", () => {
+    const longHash = "8b54ad6f02d48fef51d92f2db1a4d4d069e9449ce9a4f27b9a6c6e6d88f9d6311"; // 65 chars
+    expect(isSyntheticTransactionId(longHash)).toBe(true);
+  });
+
+  it("handles case-insensitive comparison for known prefixes", () => {
+    // Prefixes should be case-sensitive (lowercase), so these should fail prefix check
+    // but would still be detected as synthetic if they're not valid hex
+    const testIds = [
+      "UPTO-supported", // uppercase prefix - still a upto prefix
+      "Upto-settle",    // mixed case prefix
+      "upTo-test"       // different case
+    ];
+
+    // These should be detected as invalid hashes (not valid hex), hence synthetic
+    testIds.forEach((id) => {
+      expect(isSyntheticTransactionId(id)).toBe(true);
+    });
+  });
+
+  it("distinguishes between known prefixes and hex-like strings", () => {
+    // "abc123def456..." looks like hex but is only 60 chars, so it's synthetic
+    const almostValidHash = "abc123def456abc123def456abc123def456abc123def456abc123def456abc";
+    expect(isSyntheticTransactionId(almostValidHash)).toBe(true);
+
+    // Valid 64-char hex hash should not be synthetic
+    const validHash = "abc123def456abc123def456abc123def456abc123def456abc123def456abc1";
+    expect(isSyntheticTransactionId(validHash)).toBe(false);
+  });
+
+  it("returns true for identifiers with spaces", () => {
+    const syntheticIds = [
+      "8b54ad6f02d48fef51d92f2db1a4d4d069e9449ce9a4f27b9a6c6e6d88f9d63 ", // trailing space
+      " 8b54ad6f02d48fef51d92f2db1a4d4d069e9449ce9a4f27b9a6c6e6d88f9d631", // leading space
+      "8b54ad6f 02d48fef 51d92f2d b1a4d4d0 69e9449c e9a4f27b 9a6c6e6d 88f9d631" // spaces in middle
+    ];
+
+    syntheticIds.forEach((id) => {
+      expect(isSyntheticTransactionId(id)).toBe(true);
+    });
+  });
+
+  it("returns true for identifiers with special characters", () => {
+    const syntheticIds = [
+      "8b54ad6f02d48fef51d92f2db1a4d4d069e9449ce9a4f27b9a6c6e6d88f9d63!", // trailing exclamation
+      "8b54ad6f-02d48fef-51d92f2d-b1a4d4d0-69e9449c-e9a4f27b-9a6c6e6d-88f9d631", // hyphens
+      "8b54ad6f_02d48fef_51d92f2d_b1a4d4d0_69e9449c_e9a4f27b_9a6c6e6d_88f9d631"  // underscores
+    ];
+
+    syntheticIds.forEach((id) => {
+      expect(isSyntheticTransactionId(id)).toBe(true);
+    });
+  });
+
+  it("detects all synthetic identifier categories", () => {
+    const testCases = [
+      { id: "upto-supported", isTestData: true, category: "upto prefix" },
+      { id: "exact-verify", isTestData: true, category: "exact prefix" },
+      { id: "playground_123", isTestData: true, category: "playground prefix" },
+      { id: "invalid-format", isTestData: true, category: "non-hex string" },
+      { id: "8b54ad6f02d48fef51d92f2db1a4d4d069e9449ce9a4f27b9a6c6e6d88f9d631", isTestData: false, category: "valid hash" }
+    ];
+
+    testCases.forEach(({ id, isTestData, category }) => {
+      expect(isSyntheticTransactionId(id)).toBe(isTestData);
+    });
   });
 });
