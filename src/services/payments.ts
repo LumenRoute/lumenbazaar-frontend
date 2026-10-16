@@ -141,7 +141,34 @@ export function paymentActivityStatus(activity: PaymentActivity) {
   return activity.settlement?.status ?? activity.attempt.status;
 }
 
-export function explorerTransactionUrl(network: NetworkId, transactionHash: string) {
+/**
+ * Validates that a transaction hash is in valid format (64-character hex string).
+ * Valid Stellar transaction hashes are always 64 hexadecimal characters.
+ * @param hash The transaction hash to validate
+ * @returns true if the hash is valid, false otherwise
+ */
+export function isValidTransactionHash(hash: string | null | undefined): hash is string {
+  if (!hash || typeof hash !== "string") {
+    return false;
+  }
+  // Stellar transaction hashes are exactly 64 hexadecimal characters
+  return /^[a-f0-9]{64}$/i.test(hash);
+}
+
+/**
+ * Generates a Stellar Expert explorer URL for a transaction.
+ * Only generates URLs for valid transaction hashes to prevent broken links.
+ * @param network The Stellar network (testnet or pubnet)
+ * @param transactionHash The transaction hash to link to
+ * @returns The explorer URL if hash is valid, null otherwise
+ */
+export function explorerTransactionUrl(
+  network: NetworkId,
+  transactionHash: string | null | undefined
+): string | null {
+  if (!isValidTransactionHash(transactionHash)) {
+    return null;
+  }
   return `${getNetworkConfig(network).explorerUrl}/tx/${transactionHash}`;
 }
 

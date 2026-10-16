@@ -7,10 +7,19 @@ import { ReceiptDetailSummary } from "./receipt-detail-summary";
 
 // Mock the payments service to avoid external dependencies
 vi.mock("@/services/payments", () => ({
-  explorerTransactionUrl: vi.fn(
-    (network: string, hash: string) =>
-      `https://stellar.expert/explorer/${network === "stellar:testnet" ? "testnet" : "public"}/tx/${hash}`
-  )
+  explorerTransactionUrl: vi.fn((network: string, hash: string) => {
+    // Mock implementation that validates hash format
+    if (hash && /^[a-f0-9]{64}$/i.test(hash)) {
+      return `https://stellar.expert/explorer/${network === "stellar:testnet" ? "testnet" : "public"}/tx/${hash}`;
+    }
+    return null;
+  }),
+  isValidTransactionHash: vi.fn((hash: string | null | undefined) => {
+    if (!hash || typeof hash !== "string") {
+      return false;
+    }
+    return /^[a-f0-9]{64}$/i.test(hash);
+  })
 }));
 
 describe("ReceiptDetailSummary", () => {
@@ -388,5 +397,161 @@ describe("ReceiptDetailSummary", () => {
     expect(screen.getByText("attempt_123")).toBeInTheDocument();
     expect(screen.getByText("corr_123")).toBeInTheDocument();
     expect(screen.getByText("hash_abc123")).toBeInTheDocument();
+  });
+
+  it("displays warning for malformed transaction hash", () => {
+    const receipt: Receipt = {
+      amount: "100",
+      assetCode: "USDC",
+      assetIssuer: "GBUQWP3BOUZX34ULNQG23RQ6F4BVWBRXM6LSV7XYJJJX34ZPUSC6D6P2",
+      correlationId: "corr_malformed",
+      createdAt: "2026-10-15T10:00:00Z",
+      evidenceHash: "hash_malformed",
+      failureCode: null,
+      failureReason: null,
+      id: "receipt_malformed",
+      ledger: 12345,
+      network: "stellar:testnet",
+      paymentAttemptId: "attempt_malformed",
+      resourceId: null,
+      sellerId: null,
+      settledAt: "2026-10-15T10:05:00Z",
+      status: "finalized",
+      transactionHash: "invalid_hash_format", // Invalid format
+      updatedAt: "2026-10-15T10:05:00Z"
+    };
+
+    render(<ReceiptDetailSummary receipt={receipt} />);
+
+    // Should still show finality confirmation section
+    expect(screen.getByText("Finality confirmation")).toBeInTheDocument();
+    
+    // Should display the hash
+    expect(screen.getByText("invalid_hash_format")).toBeInTheDocument();
+
+    // Should show warning instead of link
+    expect(screen.getByText(/Transaction hash is invalid and cannot be verified/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /View on Stellar explorer/ })).not.toBeInTheDocument();
+  });
+
+  it("does not display finality section for finalized receipt with no transaction hash", () => {
+    const receipt: Receipt = {
+      amount: "100",
+      assetCode: "USDC",
+      assetIssuer: "GBUQWP3BOUZX34ULNQG23RQ6F4BVWBRXM6LSV7XYJJJX34ZPUSC6D6P2",
+      correlationId: "corr_no_hash",
+      createdAt: "2026-10-15T10:00:00Z",
+      evidenceHash: "hash_no_hash",
+      failureCode: null,
+      failureReason: null,
+      id: "receipt_no_hash",
+      ledger: 12345,
+      network: "stellar:testnet",
+      paymentAttemptId: "attempt_no_hash",
+      resourceId: null,
+      sellerId: null,
+      settledAt: "2026-10-15T10:05:00Z",
+      status: "finalized",
+      transactionHash: null, // No hash
+      updatedAt: "2026-10-15T10:05:00Z"
+    };
+
+    render(<ReceiptDetailSummary receipt={receipt} />);
+
+    expect(screen.queryByText("Finality confirmation")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Stellar explorer/ })).not.toBeInTheDocument();
+  });
+
+  it("displays finality section with ledger and settlement time", () => {
+    const receipt: Receipt = {
+      amount: "100",
+      assetCode: "USDC",
+      assetIssuer: "GBUQWP3BOUZX34ULNQG23RQ6F4BVWBRXM6LSV7XYJJJX34ZPUSC6D6P2",
+      correlationId: "corr_full",
+      createdAt: "2026-10-15T10:00:00Z",
+      evidenceHash: "hash_full",
+      failureCode: null,
+      failureReason: null,
+      id: "receipt_full",
+      ledger: 789456, // Specific ledger
+      network: "stellar:testnet",
+      paymentAttemptId: "attempt_full",
+      resourceId: null,
+      sellerId: null,
+      settledAt: "2026-10-15T10:05:30Z", // Specific settlement time
+      status: "finalized",
+      transactionHash: "abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+      updatedAt: "2026-10-15T10:05:30Z"
+    };
+
+    render(<ReceiptDetailSummary receipt={receipt} />);
+
+    expect(screen.getByText("Finality confirmation")).toBeInTheDocument();
+    expect(screen.getByText("789456")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /View on Stellar explorer/ })
+    ).toBeInTheDocument();
+  });
+
+  it("handles transaction hash with null ledger gracefully", () => {
+    const receipt: Receipt = {
+      amount: "100",
+      assetCode: "USDC",
+      assetIssuer: "GBUQWP3BOUZX34ULNQG23RQ6F4BVWBRXM6LSV7XYJJJX34ZPUSC6D6P2",
+      correlationId: "corr_no_ledger",
+      createdAt: "2026-10-15T10:00:00Z",
+      evidenceHash: "hash_no_ledger",
+      failureCode: null,
+      failureReason: null,
+      id: "receipt_no_ledger",
+      ledger: null, // No ledger
+      network: "stellar:testnet",
+      paymentAttemptId: "attempt_no_ledger",
+      resourceId: null,
+      sellerId: null,
+      settledAt: "2026-10-15T10:05:00Z",
+      status: "finalized",
+      transactionHash: "abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+      updatedAt: "2026-10-15T10:05:00Z"
+    };
+
+    render(<ReceiptDetailSummary receipt={receipt} />);
+
+    expect(screen.getByText("Finality confirmation")).toBeInTheDocument();
+    expect(screen.getByText("Unknown")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /View on Stellar explorer/ })
+    ).toBeInTheDocument();
+  });
+
+  it("handles transaction hash with null settlement time gracefully", () => {
+    const receipt: Receipt = {
+      amount: "100",
+      assetCode: "USDC",
+      assetIssuer: "GBUQWP3BOUZX34ULNQG23RQ6F4BVWBRXM6LSV7XYJJJX34ZPUSC6D6P2",
+      correlationId: "corr_no_settled_at",
+      createdAt: "2026-10-15T10:00:00Z",
+      evidenceHash: "hash_no_settled_at",
+      failureCode: null,
+      failureReason: null,
+      id: "receipt_no_settled_at",
+      ledger: 123456,
+      network: "stellar:testnet",
+      paymentAttemptId: "attempt_no_settled_at",
+      resourceId: null,
+      sellerId: null,
+      settledAt: null, // No settlement time
+      status: "finalized",
+      transactionHash: "abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+      updatedAt: "2026-10-15T10:05:00Z"
+    };
+
+    render(<ReceiptDetailSummary receipt={receipt} />);
+
+    expect(screen.getByText("Finality confirmation")).toBeInTheDocument();
+    expect(screen.getByText("Pending")).toBeInTheDocument(); // Fallback text for missing settledAt
+    expect(
+      screen.getByRole("link", { name: /View on Stellar explorer/ })
+    ).toBeInTheDocument();
   });
 });
