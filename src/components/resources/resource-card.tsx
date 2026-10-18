@@ -5,7 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import type { Resource, Seller } from "@/services/api/schemas";
 
+import { ResourceHealthBadges } from "./resource-health";
+
 type ResourceCardProps = {
+  compare?: {
+    disabled: boolean;
+    onToggle: () => void;
+    selected: boolean;
+  };
   partialResults?: boolean;
   resource: Resource & {
     ranking?: {
@@ -16,7 +23,12 @@ type ResourceCardProps = {
   seller?: Seller;
 };
 
-export function ResourceCard({ partialResults = false, resource, seller }: ResourceCardProps) {
+export function ResourceCard({
+  compare,
+  partialResults = false,
+  resource,
+  seller
+}: ResourceCardProps) {
   const verified = seller?.domainVerifiedAt !== null || resource.extensions.trusted === true;
   const metadataQuality =
     typeof resource.extensions.metadataQuality === "number"
@@ -38,13 +50,27 @@ export function ResourceCard({ partialResults = false, resource, seller }: Resou
           </div>
           <p className="mt-1 text-sm leading-6 text-slate-600">{resource.description}</p>
         </div>
-        <Link
-          className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm hover:bg-slate-50"
-          href={`/resources/${resource.id}`}
-        >
-          Inspect
-          <ArrowRight aria-hidden="true" className="h-4 w-4" />
-        </Link>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {compare ? (
+            <label className="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm">
+              <input
+                checked={compare.selected}
+                className="h-4 w-4 rounded border-slate-300 text-teal-700"
+                disabled={compare.disabled && !compare.selected}
+                onChange={compare.onToggle}
+                type="checkbox"
+              />
+              Compare
+            </label>
+          ) : null}
+          <Link
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm hover:bg-slate-50"
+            href={`/resources/${resource.id}`}
+          >
+            Inspect
+            <ArrowRight aria-hidden="true" className="h-4 w-4" />
+          </Link>
+        </div>
       </CardHeader>
       <CardBody className="space-y-4">
         <dl className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
@@ -90,6 +116,8 @@ export function ResourceCard({ partialResults = false, resource, seller }: Resou
             <Badge tone="neutral">{resource.ranking.matchedTerms.join(", ")}</Badge>
           ) : null}
         </div>
+
+        <ResourceHealthBadges resource={resource} />
       </CardBody>
     </Card>
   );

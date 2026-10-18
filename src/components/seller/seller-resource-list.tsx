@@ -17,6 +17,8 @@ import { queryKeys } from "@/services/api/query";
 import { formatPaymentAmount, loadSellerResourceSnapshot, shortHash } from "@/services/payments";
 import { emptyStateForCollection, normalizeUiError } from "@/services/ui-state";
 
+import { useSellerSession } from "./seller-session-provider";
+
 const statusOptions: Array<{ label: string; value: ResourceStatus | "all" }> = [
   { label: "All", value: "all" },
   { label: "Active", value: "active" },
@@ -27,6 +29,7 @@ const statusOptions: Array<{ label: string; value: ResourceStatus | "all" }> = [
 export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sellerId?: string }) {
   const mode = loadRuntimeConfig().environment;
   const demo = isDemoMode(mode);
+  const { canMutate } = useSellerSession();
   const [status, setStatus] = useState<ResourceStatus | "all">("all");
   const [disabledIds, setDisabledIds] = useState<Set<string>>(new Set());
   const emptyState = emptyStateForCollection("resources");
@@ -133,7 +136,7 @@ export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sell
                     {resources.map((resource) => (
                       <ResourceRow
                         disabled={disabledIds.has(resource.id)}
-                        editable={demo}
+                        editable={demo && canMutate}
                         key={resource.id}
                         onDisable={() =>
                           setDisabledIds((current) => new Set([...current, resource.id]))

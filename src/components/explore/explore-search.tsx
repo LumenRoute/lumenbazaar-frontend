@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -11,14 +12,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { ResourceCard } from "@/components/resources/resource-card";
 import { EmptyState, ErrorState } from "@/components/ui/surfaces";
+import {
+  discoveryDefaults,
+  discoveryHref,
+  emptyDiscoveryState,
+  resourceSorts,
+  toExploreSearchInput,
+  type DiscoveryState
+} from "@/services/discovery-params";
+import { maxComparisonResources } from "@/services/resource-comparison";
 import { queryKeys } from "@/services/api/query";
-import { searchCatalog, type ExploreSearchInput, type ResourceSort } from "@/services/catalog";
+import { searchCatalog, type ResourceSort } from "@/services/catalog";
 import { normalizeUiError } from "@/services/ui-state";
 
 type ExploreSearchProps = {
-  initialFilters: Omit<ExploreSearchInput, "cursor" | "q" | "sort">;
-  initialQuery: string;
-  initialSort: ResourceSort;
+  initialState: DiscoveryState;
 };
 
 const sortOptions: Array<{ label: string; value: ResourceSort }> = [
@@ -28,36 +36,48 @@ const sortOptions: Array<{ label: string; value: ResourceSort }> = [
   { label: "Recently updated", value: "recent" }
 ];
 
-export function ExploreSearch({ initialFilters, initialQuery, initialSort }: ExploreSearchProps) {
+export function ExploreSearch({ initialState }: ExploreSearchProps) {
   const router = useRouter();
-  const [query, setQuery] = useState(initialQuery);
-  const [filters, setFilters] = useState(initialFilters);
-  const [sort, setSort] = useState<ResourceSort>(initialSort);
+  const [state, setState] = useState<DiscoveryState>(initialState);
+  const [queryDraft, setQueryDraft] = useState(initialState.q);
+  const [priceDrafts, setPriceDrafts] = useState<DiscoveryState>(initialState);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const request = toExploreSearchInput(state);
   const { data, error, isFetching, refetch } = useQuery({
-    queryFn: () => searchCatalog({ ...initialFilters, q: initialQuery, sort }),
-    queryKey: queryKeys.search({ ...initialFilters, q: initialQuery, sort })
+    queryFn: () => searchCatalog(request),
+    queryKey: queryKeys.search(request)
   });
+
+  function goTo(next: DiscoveryState) {
+    setState(next);
+    setPriceDrafts(next);
+    router.push(discoveryHref(next));
+  }
+
+  function withDrafts(next: DiscoveryState): DiscoveryState {
+    return {
+      ...next,
+      asset: priceDrafts.asset,
+      maxPrice: priceDrafts.maxPrice,
+      minPrice: priceDrafts.minPrice
+    };
+  }
 
   function submitSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const params = new URLSearchParams();
-
-    if (query.trim().length > 0) {
-      params.set("q", query.trim());
-    }
-
-    if (sort !== "relevance") {
-      params.set("sort", sort);
-    }
-
-    for (const [key, value] of Object.entries(filters)) {
-      if (value !== undefined && value !== "" && value !== "any") {
-        params.set(key, String(value));
-      }
-    }
-
-    router.push(`/explore${params.size > 0 ? `?${params.toString()}` : ""}`);
+    goTo({ ...withDrafts(state), cursor: undefined, q: queryDraft.trim() });
   }
+
+  function toggleComparison(id: string) {
+    setSelectedIds((current) => {
+      if (current.includes(id)) return current.filter((selected) => selected !== id);
+      if (current.length >= maxComparisonResources) return current;
+
+      return [...current, id];
+    });
+  }
+
+  const filters = state;
 
   return (
     <div className="space-y-5">
@@ -70,17 +90,22 @@ export function ExploreSearch({ initialFilters, initialQuery, initialSort }: Exp
                 <span className="sr-only">Search resources</span>
                 <input
                   className="min-w-0 flex-1 border-0 bg-transparent text-sm outline-none placeholder:text-slate-400"
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => setQueryDraft(event.target.value)}
                   placeholder="Search APIs, MCP tools, schemas, or assets"
-                  value={query}
+                  value={queryDraft}
                 />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="sr-only">Sort resources</span>
                 <select
                   className="min-h-11 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
-                  onChange={(event) => setSort(event.target.value as ResourceSort)}
-                  value={sort}
+                  onChange={(event) => {
+                    const sort = resourceSorts.includes(event.target.value as ResourceSort)
+                      ? (event.target.value as ResourceSort)
+                      : discoveryDefaults.sort;
+                    goTo(withDrafts({ ...state, cursor: undefined, sort }));
+                  }}
+                  value={state.sort}
                 >
                   {sortOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -97,10 +122,13 @@ export function ExploreSearch({ initialFilters, initialQuery, initialSort }: Exp
                 aria-label="Network"
                 className="min-h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
                 onChange={(event) =>
-                  setFilters((current) => ({
-                    ...current,
-                    network: event.target.value === "" ? undefined : (event.target.value as never)
-                  }))
+                  goTo(
+                    withDrafts({
+                      ...state,
+                      cursor: undefined,
+                      network: event.target.value === "" ? undefined : (event.target.value as never)
+                    })
+                  )
                 }
                 value={filters.network ?? ""}
               >
@@ -112,22 +140,25 @@ export function ExploreSearch({ initialFilters, initialQuery, initialSort }: Exp
                 aria-label="Asset"
                 className="min-h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
                 onChange={(event) =>
-                  setFilters((current) => ({
+                  setPriceDrafts((current) => ({
                     ...current,
                     asset: event.target.value.trim() === "" ? undefined : event.target.value
                   }))
                 }
                 placeholder="Asset"
-                value={filters.asset ?? ""}
+                value={priceDrafts.asset ?? ""}
               />
               <select
                 aria-label="Resource type"
                 className="min-h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
                 onChange={(event) =>
-                  setFilters((current) => ({
-                    ...current,
-                    type: event.target.value === "" ? undefined : (event.target.value as never)
-                  }))
+                  goTo(
+                    withDrafts({
+                      ...state,
+                      cursor: undefined,
+                      type: event.target.value === "" ? undefined : (event.target.value as never)
+                    })
+                  )
                 }
                 value={filters.type ?? ""}
               >
@@ -139,11 +170,13 @@ export function ExploreSearch({ initialFilters, initialQuery, initialSort }: Exp
                 aria-label="Seller verification"
                 className="min-h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
                 onChange={(event) =>
-                  setFilters((current) => ({
-                    ...current,
-                    sellerVerification: event.target
-                      .value as ExploreSearchInput["sellerVerification"]
-                  }))
+                  goTo(
+                    withDrafts({
+                      ...state,
+                      cursor: undefined,
+                      sellerVerification: event.target.value as DiscoveryState["sellerVerification"]
+                    })
+                  )
                 }
                 value={filters.sellerVerification ?? "any"}
               >
@@ -155,10 +188,14 @@ export function ExploreSearch({ initialFilters, initialQuery, initialSort }: Exp
                 aria-label="Extension"
                 className="min-h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
                 onChange={(event) =>
-                  setFilters((current) => ({
-                    ...current,
-                    extension: event.target.value === "" ? undefined : (event.target.value as never)
-                  }))
+                  goTo(
+                    withDrafts({
+                      ...state,
+                      cursor: undefined,
+                      extension:
+                        event.target.value === "" ? undefined : (event.target.value as never)
+                    })
+                  )
                 }
                 value={filters.extension ?? ""}
               >
@@ -171,25 +208,25 @@ export function ExploreSearch({ initialFilters, initialQuery, initialSort }: Exp
                   aria-label="Minimum price"
                   className="min-h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
                   onChange={(event) =>
-                    setFilters((current) => ({
+                    setPriceDrafts((current) => ({
                       ...current,
                       minPrice: event.target.value.trim() === "" ? undefined : event.target.value
                     }))
                   }
                   placeholder="Min"
-                  value={filters.minPrice ?? ""}
+                  value={priceDrafts.minPrice ?? ""}
                 />
                 <input
                   aria-label="Maximum price"
                   className="min-h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
                   onChange={(event) =>
-                    setFilters((current) => ({
+                    setPriceDrafts((current) => ({
                       ...current,
                       maxPrice: event.target.value.trim() === "" ? undefined : event.target.value
                     }))
                   }
                   placeholder="Max"
-                  value={filters.maxPrice ?? ""}
+                  value={priceDrafts.maxPrice ?? ""}
                 />
               </div>
             </div>
@@ -206,11 +243,59 @@ export function ExploreSearch({ initialFilters, initialQuery, initialSort }: Exp
           ) : null}
           {data?.partialResults ? <Badge tone="warning">Partial results</Badge> : null}
           {data ? <DataFreshnessBadge observedAt={data.fetchedAt} source={data.source} /> : null}
+          {state.cursor ? <Badge tone="info">Cursor page</Badge> : null}
         </div>
         <p className="text-sm text-slate-600">
           {isFetching ? "Refreshing" : `${data?.resources.length ?? 0} resources`}
         </p>
       </div>
+
+      <Card>
+        <CardBody className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-slate-950">
+              Compare ({selectedIds.length}/{maxComparisonResources})
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Select two or more results to compare payment terms, schemas, and evidence.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              aria-disabled={selectedIds.length < 2}
+              className={
+                selectedIds.length < 2
+                  ? "pointer-events-none inline-flex min-h-10 items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-medium text-slate-400"
+                  : "inline-flex min-h-10 items-center justify-center rounded-md border border-teal-700 bg-teal-700 px-3 py-2 text-sm font-medium text-white hover:bg-teal-800"
+              }
+              href={`/explore/compare?ids=${encodeURIComponent(selectedIds.join(","))}`}
+            >
+              Compare selected
+            </Link>
+            <Button
+              disabled={selectedIds.length === 0}
+              onClick={() => setSelectedIds([])}
+              type="button"
+              variant="secondary"
+            >
+              Clear
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
+
+      {state.cursor ? (
+        <p className="text-sm text-slate-600">
+          Showing results after a copied cursor.{" "}
+          <Link
+            className="font-medium text-teal-700 underline"
+            href={discoveryHref({ ...state, cursor: undefined })}
+          >
+            Start from the first page
+          </Link>
+          .
+        </p>
+      ) : null}
 
       {data === undefined && error !== null ? (
         <ErrorState
@@ -226,13 +311,18 @@ export function ExploreSearch({ initialFilters, initialQuery, initialSort }: Exp
       {data !== undefined && data.resources.length === 0 ? (
         <EmptyState
           title="No resources matched"
-          description="Try a broader query or remove filters when filter controls are available."
+          description="Try a broader query or remove filters. Shareable links keep every filter in the URL."
         />
       ) : null}
 
       <div className="grid gap-3" aria-live="polite">
         {data?.resources.map((resource) => (
           <ResourceCard
+            compare={{
+              disabled: selectedIds.length >= maxComparisonResources,
+              onToggle: () => toggleComparison(resource.id),
+              selected: selectedIds.includes(resource.id)
+            }}
             key={resource.id}
             partialResults={data.partialResults}
             resource={resource}
@@ -240,11 +330,30 @@ export function ExploreSearch({ initialFilters, initialQuery, initialSort }: Exp
         ))}
       </div>
 
-      {data?.nextCursor ? (
-        <Button type="button" variant="secondary">
-          Load more
-        </Button>
-      ) : null}
+      <div className="flex flex-wrap gap-2">
+        {data?.nextCursor ? (
+          <Button
+            onClick={() => goTo({ ...state, cursor: data.nextCursor ?? undefined })}
+            type="button"
+            variant="secondary"
+          >
+            Load more
+          </Button>
+        ) : null}
+        {state.cursor || state.q.length > 0 ? (
+          <Button
+            onClick={() => {
+              const reset = emptyDiscoveryState();
+              setQueryDraft(reset.q);
+              goTo(reset);
+            }}
+            type="button"
+            variant="secondary"
+          >
+            Reset discovery
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
