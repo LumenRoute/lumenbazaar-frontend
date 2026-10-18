@@ -4,16 +4,17 @@ import { ExternalLink, Filter, ReceiptText, X } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { tryFormatAmount } from "@/lib/amount-formatter";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState, ErrorState } from "@/components/ui/surfaces";
+import { FormattedAmountDisplay } from "@/components/ui/formatted-amount";
 import type { NetworkId } from "@/config/networks";
 import { isDemoMode, loadRuntimeConfig } from "@/config/runtime";
 import {
   explorerTransactionUrl,
-  formatPaymentAmount,
   isSyntheticTransactionId,
   isValidTransactionHash,
   loadPaymentActivity,
@@ -253,6 +254,12 @@ function TransactionRow({ activity }: { activity: PaymentActivity }) {
   const status = paymentActivityStatus(activity);
   const transactionHash = activity.settlement?.transactionHash ?? activity.receipt?.transactionHash;
 
+  // Format the amount using network-specific asset metadata
+  const formattedAmount = useMemo(
+    () => tryFormatAmount(activity.attempt.amount, activity.attempt.assetCode, activity.attempt.network),
+    [activity.attempt.amount, activity.attempt.assetCode, activity.attempt.network]
+  );
+
   return (
     <tr className="align-top">
       <td className="px-3 py-3">
@@ -283,10 +290,12 @@ function TransactionRow({ activity }: { activity: PaymentActivity }) {
       <td className="px-3 py-3">
         <Badge tone={transactionTone(status)}>{status}</Badge>
       </td>
-      <td className="px-3 py-3 text-slate-700">
-        <span className="block">
-          {formatPaymentAmount(activity.attempt.amount, activity.attempt.assetCode)}
-        </span>
+      <td className="px-3 py-3">
+        <FormattedAmountDisplay
+          fallbackContractId={activity.attempt.assetCode}
+          formattedAmount={formattedAmount}
+          showAtomic={false}
+        />
         <span className="block break-all text-xs text-slate-500">{activity.attempt.network}</span>
       </td>
       <td className="px-3 py-3 text-slate-700">

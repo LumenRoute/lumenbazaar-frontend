@@ -1,11 +1,14 @@
 "use client";
 
 import { Clipboard, ReceiptText, TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
+import { tryFormatAmount } from "@/lib/amount-formatter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { FormattedAmountDisplay } from "@/components/ui/formatted-amount";
+import { getNetworkConfig } from "@/config/networks";
 import type { ErrorCode, ResourcePaymentSummary } from "@/services/api/schemas";
 
 import { prettyJson } from "./schema-utils";
@@ -23,6 +26,14 @@ export function PaymentRequirementViewer({
   requirement
 }: PaymentRequirementViewerProps) {
   const [copied, setCopied] = useState(false);
+
+  // Format the amount using network-specific asset metadata
+  const networkConfig = getNetworkConfig(requirement.network);
+  const formattedAmount = useMemo(
+    () =>
+      tryFormatAmount(requirement.amount, requirement.assetCode, requirement.network),
+    [requirement.amount, requirement.assetCode, requirement.network]
+  );
 
   async function copyPayload() {
     await navigator.clipboard.writeText(prettyJson(requirement));
@@ -46,7 +57,16 @@ export function PaymentRequirementViewer({
       <CardBody className="space-y-5">
         <dl className="grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-4">
           <Field label="Network" value={requirement.network} />
-          <Field label="Amount" value={`${requirement.amount} ${requirement.assetCode}`} />
+          <div className="min-w-0">
+            <dt className="text-slate-500">Amount</dt>
+            <dd className="mt-1">
+              <FormattedAmountDisplay
+                fallbackContractId={requirement.assetCode}
+                formattedAmount={formattedAmount}
+                showAtomic={true}
+              />
+            </dd>
+          </div>
           <Field label="Asset issuer" value={requirement.assetIssuer} wrap />
           <Field label="Recipient" value={requirement.payTo} wrap />
           <Field label="Resource" value={requirement.resourceId} wrap />
