@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, ShieldCheck, WalletCards } from "lucide-react";
+import { ExternalLink, RefreshCw, ShieldCheck, WalletCards } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -41,38 +41,39 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
   const [error, setError] = useState<string>();
   const [isLoading, setIsLoading] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
+  const [isCheckingFinality, setIsCheckingFinality] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
   const [flowState, setFlowState] = useState<PaidFlowState>();
   const [outcome, setOutcome] = useState<PaidFlowOutcome>();
-  const [secondsRemaining, setSecondsRemaining] = useState<number | undefined>(undefined);
+  const [clock, setClock] = useState(() => Date.now());
+  const activeRequest = useRef<AbortController | null>(null);
   const fingerprint = useRef<string | undefined>(undefined);
   const paymentLocked = outcome?.state === "pending" || outcome?.state === "indeterminate";
+  const secondsRemaining =
+    challenge === undefined ? undefined : challengeSecondsRemaining(challenge, clock);
   const isExpired = secondsRemaining !== undefined && secondsRemaining === 0;
 
-  // Drive a per-second countdown while a challenge is live.
+  // Tick a clock while a challenge is live so the countdown stays accurate.
   useEffect(() => {
-    if (challenge === undefined) {
-      setSecondsRemaining(undefined);
-      return;
-    }
-
-    // Compute and set immediately so the display is accurate before the first tick.
-    setSecondsRemaining(challengeSecondsRemaining(challenge));
-
-    const id = setInterval(() => {
-      setSecondsRemaining(challengeSecondsRemaining(challenge));
-    }, 1_000);
+    if (challenge === undefined) return;
+    const id = setInterval(() => setClock(Date.now()), 1_000);
 
     return () => clearInterval(id);
   }, [challenge]);
 
   useEffect(() => {
     if (source !== "api") return;
-    void paidFlowCoordinator.recover({ resourceId: resource.id }).then((recovered) => {
-      if (recovered === undefined) return;
-      setOutcome(recovered);
-      setFlowState(recovered.state);
-    });
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    void paidFlowCoordinator
+      .recover({ resourceId: resource.id, signal: controller.signal })
+      .then((recovered) => {
+        if (recovered === undefined || controller.signal.aborted) return;
+        setOutcome(recovered);
+        setFlowState(recovered.state);
+      });
+
+    return () => controller.abort();
   }, [resource.id, source]);
 
   async function requestTerms() {
@@ -81,7 +82,6 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
     setChallenge(undefined);
     setFlowState(undefined);
     setOutcome(undefined);
-    setSecondsRemaining(undefined);
     // Reset stale authorization fingerprint so the previous signed state cannot
     // be accidentally reused after a refresh.
     fingerprint.current = undefined;
@@ -104,6 +104,7 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
       );
       fingerprint.current = next.fingerprint;
       setChallenge(next);
+      setClock(Date.now());
     } catch (caught) {
       setChallenge(undefined);
       setError(
@@ -145,12 +146,15 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
     if (challenge === undefined || authorization === undefined || paymentLocked) return;
     setError(undefined);
     setIsPaying(true);
+    const controller = new AbortController();
+    activeRequest.current = controller;
     try {
       const result = await paidFlowCoordinator.execute({
         authorization,
         challenge,
         onState: setFlowState,
-        resourceId: resource.id
+        resourceId: resource.id,
+        signal: controller.signal
       });
       setOutcome(result);
       setFlowState(result.state);
@@ -162,6 +166,24 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
       setFlowState("indeterminate");
     } finally {
       setIsPaying(false);
+    }
+  }
+
+  async function resumeFinality() {
+    setError(undefined);
+    setIsCheckingFinality(true);
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    try {
+      const recovered = await paidFlowCoordinator.recover({
+        resourceId: resource.id,
+        signal: controller.signal
+      });
+      if (recovered === undefined || controller.signal.aborted) return;
+      setOutcome(recovered);
+      setFlowState(recovered.state);
+    } finally {
+      setIsCheckingFinality(false);
     }
   }
 
@@ -289,6 +311,26 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
             <Badge tone={flowTone(flowState)}>{paidFlowStateLabels[flowState]}</Badge>
           </div>
         ) : null}
+        {outcome?.state === "pending" ? (
+          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4">
+            <Button
+              disabled={isCheckingFinality}
+              onClick={() => void resumeFinality()}
+              type="button"
+              variant="secondary"
+            >
+              <RefreshCw aria-hidden="true" className="h-4 w-4" />
+              {isCheckingFinality ? "Checking finality" : "Resume receipt check"}
+            </Button>
+            <span className="text-xs text-slate-500">
+              {outcome.receiptLookupAttempts === undefined
+                ? "Receipt lookups pause while this tab is hidden."
+                : `${outcome.receiptLookupAttempts} receipt ${
+                    outcome.receiptLookupAttempts === 1 ? "check" : "checks"
+                  } completed. Lookups pause while this tab is hidden.`}
+            </span>
+          </div>
+        ) : null}
         {outcome !== undefined ? <PaymentOutcome outcome={outcome} /> : null}
       </CardBody>
     </Card>
@@ -340,7 +382,7 @@ function PaymentOutcome({ outcome }: { outcome: PaidFlowOutcome }) {
       {transactionHash !== undefined && network !== undefined ? (
         <a
           className="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm hover:bg-slate-50"
-          href={explorerTransactionUrl(network, transactionHash)}
+          href={explorerTransactionUrl(network, transactionHash) ?? undefined}
           rel="noreferrer"
           target="_blank"
         >

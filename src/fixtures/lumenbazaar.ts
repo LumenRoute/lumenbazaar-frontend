@@ -191,7 +191,7 @@ export const demoSupportedPaymentSchemes: SupportedPaymentSchemes = supportedSch
         assets: [
           {
             code: "USDC",
-            contractId: "CASSETDEMO",
+            contractId: "CA7QYNF7SOWQ4VJNMGEVXZHYQACUIM2MRRPFNQ4SLRJRYE67Z2BJQXMR",
             decimals: 7,
             issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
           }

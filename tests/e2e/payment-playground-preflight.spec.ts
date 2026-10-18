@@ -39,9 +39,7 @@ test.describe("Payment Playground", () => {
       await expect(modeIndicator).toBeVisible();
 
       // Should show either "Live API" or "Simulated (fixtures)" badge
-      const modeBadge = page
-        .getByText(/Live API|Simulated \(fixtures\)/)
-        .first();
+      const modeBadge = page.getByText(/Live API|Simulated \(fixtures\)/).first();
       await expect(modeBadge).toBeVisible();
     });
 
@@ -70,14 +68,17 @@ test.describe("Payment Playground", () => {
       await expect(modeBadge).toBeVisible();
     });
 
-    test("should show error state when API is unavailable in live mode", async ({ page, context }) => {
+    test("should show error state when API is unavailable in live mode", async ({
+      page,
+      context
+    }) => {
       // Check if live mode error is already shown
       const errorText = page.getByText(/Live resources unavailable|could not reach/i);
-      
+
       // If error is visible, verify it includes appropriate messaging
       if (await errorText.isVisible({ timeout: 1000 }).catch(() => false)) {
         await expect(errorText).toBeVisible();
-        
+
         // Should show "Switch to Simulation" button in error
         const switchButton = page.getByRole("button", { name: /Switch to Simulation/ });
         await expect(switchButton).toBeVisible();
@@ -110,7 +111,9 @@ test.describe("Payment Playground", () => {
       expect(await simulatedBadges.count()).toBeGreaterThanOrEqual(2); // At least on verify and settle
     });
 
-    test("should show alternative text instead of explorer link for simulated settlement", async ({ page }) => {
+    test("should show alternative text instead of explorer link for simulated settlement", async ({
+      page
+    }) => {
       // Generate simulated settlement
       const simulateVerifyButton = page.getByRole("button", { name: /Simulate verify/ });
       await simulateVerifyButton.click();
@@ -162,7 +165,7 @@ test.describe("Payment Playground", () => {
       // Explorer link should not be clickable for simulated
       const explorerLink = page.getByRole("link", { name: /Stellar transaction/ });
       const isVisible = await explorerLink.isVisible({ timeout: 1000 }).catch(() => false);
-      
+
       if (isVisible) {
         // If link is visible, it should only be for live mode (which shouldn't have happened in simulation)
         expect(false, "Explorer link should not be visible for simulated settlement").toBe(true);
@@ -219,9 +222,7 @@ test.describe("Payment Playground", () => {
       await expect(preflightCard).toBeVisible();
 
       // Verify description text
-      await expect(
-        page.getByText(/Enter a Stellar public key to validate/)
-      ).toBeVisible();
+      await expect(page.getByText(/Enter a Stellar public key to validate/)).toBeVisible();
 
       // Verify input field
       await expect(page.getByLabel("Public Key (G...)")).toBeVisible();
@@ -339,7 +340,9 @@ test.describe("Payment Playground", () => {
       await checkButton.click();
 
       // Error should indicate insufficient balance
-      await expect(page.getByText(/INSUFFICIENT_BALANCE|Insufficient balance/, { timeout: 5000 })).toBeVisible();
+      await expect(
+        page.getByText(/INSUFFICIENT_BALANCE|Insufficient balance/, { timeout: 5000 })
+      ).toBeVisible();
     });
 
     test("should show balance details in insufficient balance error", async ({ page }) => {
@@ -425,7 +428,9 @@ test.describe("Payment Playground", () => {
       await checkButton.click();
 
       // Should show network error
-      await expect(page.getByText(/NETWORK_ERROR|Network error|network|unavailable/, { timeout: 5000 })).toBeVisible();
+      await expect(
+        page.getByText(/NETWORK_ERROR|Network error|network|unavailable/, { timeout: 5000 })
+      ).toBeVisible();
     });
 
     test("should display error with warning/amber styling", async ({ page }) => {
@@ -439,7 +444,10 @@ test.describe("Payment Playground", () => {
       await checkButton.click();
 
       // Error panel should have warning styling
-      const errorPanel = page.locator("div").filter({ hasText: /TRUSTLINE_REQUIRED|INSUFFICIENT_BALANCE/ }).first();
+      const errorPanel = page
+        .locator("div")
+        .filter({ hasText: /TRUSTLINE_REQUIRED|INSUFFICIENT_BALANCE/ })
+        .first();
       await expect(errorPanel).toHaveClass(/amber|warning/i);
     });
   });
@@ -508,7 +516,10 @@ test.describe("Payment Playground", () => {
       await checkButton.click();
 
       // Error panel should be readable on mobile (no horizontal scroll)
-      const errorPanel = page.locator("div").filter({ hasText: /TRUSTLINE_REQUIRED|error/ }).first();
+      const errorPanel = page
+        .locator("div")
+        .filter({ hasText: /TRUSTLINE_REQUIRED|error/ })
+        .first();
       await expect(errorPanel).toBeVisible();
 
       // Error text should wrap properly
@@ -672,6 +683,8 @@ test.describe("Payment Playground", () => {
     });
   });
 });
+
+test.describe("Payment Playground Preflight", () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to playground in demo mode
     await page.goto("/playground");
@@ -685,9 +698,7 @@ test.describe("Payment Playground", () => {
       await expect(preflightCard).toBeVisible();
 
       // Verify description text
-      await expect(
-        page.getByText(/Enter a Stellar public key to validate/)
-      ).toBeVisible();
+      await expect(page.getByText(/Enter a Stellar public key to validate/)).toBeVisible();
 
       // Verify input field
       await expect(page.getByLabel("Public Key (G...)")).toBeVisible();
@@ -805,7 +816,9 @@ test.describe("Payment Playground", () => {
       await checkButton.click();
 
       // Error should indicate insufficient balance
-      await expect(page.getByText(/INSUFFICIENT_BALANCE|Insufficient balance/, { timeout: 5000 })).toBeVisible();
+      await expect(
+        page.getByText(/INSUFFICIENT_BALANCE|Insufficient balance/, { timeout: 5000 })
+      ).toBeVisible();
     });
 
     test("should show balance details in insufficient balance error", async ({ page }) => {
@@ -891,7 +904,9 @@ test.describe("Payment Playground", () => {
       await checkButton.click();
 
       // Should show network error
-      await expect(page.getByText(/NETWORK_ERROR|Network error|network|unavailable/, { timeout: 5000 })).toBeVisible();
+      await expect(
+        page.getByText(/NETWORK_ERROR|Network error|network|unavailable/, { timeout: 5000 })
+      ).toBeVisible();
     });
 
     test("should display error with warning/amber styling", async ({ page }) => {
@@ -905,7 +920,10 @@ test.describe("Payment Playground", () => {
       await checkButton.click();
 
       // Error panel should have warning styling
-      const errorPanel = page.locator("div").filter({ hasText: /TRUSTLINE_REQUIRED|INSUFFICIENT_BALANCE/ }).first();
+      const errorPanel = page
+        .locator("div")
+        .filter({ hasText: /TRUSTLINE_REQUIRED|INSUFFICIENT_BALANCE/ })
+        .first();
       await expect(errorPanel).toHaveClass(/amber|warning/i);
     });
   });
@@ -974,7 +992,10 @@ test.describe("Payment Playground", () => {
       await checkButton.click();
 
       // Error panel should be readable on mobile (no horizontal scroll)
-      const errorPanel = page.locator("div").filter({ hasText: /TRUSTLINE_REQUIRED|error/ }).first();
+      const errorPanel = page
+        .locator("div")
+        .filter({ hasText: /TRUSTLINE_REQUIRED|error/ })
+        .first();
       await expect(errorPanel).toBeVisible();
 
       // Error text should wrap properly

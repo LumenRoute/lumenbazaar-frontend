@@ -4,6 +4,15 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ErrorState, LoadingState } from "@/components/ui/surfaces";
+import type { Resource } from "@/services/api/schemas";
+import {
+  clearEditDraft,
+  loadEditDraft,
+  loadResourceForEdit,
+  saveEditDraft
+} from "@/services/resource-edit";
+import { ResourceEditReview } from "./resource-edit-review";
 import { ResourceWizardBasicInfo } from "./resource-wizard-basic-info";
 import { ResourceWizardPricing } from "./resource-wizard-pricing";
 import { ResourceWizardMetadata } from "./resource-wizard-metadata";
@@ -18,15 +27,17 @@ import {
   type ResourceDraft
 } from "@/services/resource-creation";
 
-export type WizardStep = "basic-info" | "pricing" | "metadata" | "snippets" | "publish";
+export type WizardStep = "basic-info" | "pricing" | "metadata" | "snippets" | "review" | "publish";
 
 type ResourceWizardProps = {
   onCancel: () => void;
   onPublish?: (draft: ResourceDraft) => void;
+  /** Enables editing of an existing resource version instead of creation. */
+  resourceId?: string;
   sellerId: string;
 };
 
-const STEPS: Array<{ id: WizardStep; label: string; description: string }> = [
+const CREATE_STEPS: Array<{ id: WizardStep; label: string; description: string }> = [
   { id: "basic-info", label: "Resource Info", description: "Name, type, and endpoint" },
   { id: "pricing", label: "Pricing", description: "Network, asset, and amount" },
   { id: "metadata", label: "Metadata", description: "Input/output schemas and extensions" },
@@ -34,27 +45,81 @@ const STEPS: Array<{ id: WizardStep; label: string; description: string }> = [
   { id: "publish", label: "Publish", description: "Validate and publish" }
 ];
 
-export function ResourceWizard({ onCancel, onPublish, sellerId }: ResourceWizardProps) {
+const EDIT_STEPS: Array<{ id: WizardStep; label: string; description: string }> = [
+  ...CREATE_STEPS.filter((step) => step.id !== "publish"),
+  { id: "review", label: "Review changes", description: "Compare versions and publish" }
+];
+
+export function ResourceWizard({ onCancel, onPublish, resourceId, sellerId }: ResourceWizardProps) {
   const [draft, setDraft] = useState<ResourceDraft | null>(null);
+  const [editBase, setEditBase] = useState<Resource | null>(null);
+  const [editError, setEditError] = useState<Error | null>(null);
+  const [editLoading, setEditLoading] = useState(resourceId !== undefined);
   const [currentStep, setCurrentStep] = useState<WizardStep>("basic-info");
   const [isLoading, setIsLoading] = useState(false);
   const [unsavedChanges, setUnsavedChanges] = useState(false);
+  const steps = resourceId === undefined ? CREATE_STEPS : EDIT_STEPS;
 
-  // Load draft from storage on mount
+  // Load an existing version from the API; a preserved draft wins over the
+  // server version so a conflict never discards local edits.
   useEffect(() => {
+    if (resourceId === undefined) return;
+    let cancelled = false;
+
+    void loadResourceForEdit(resourceId)
+      .then((snapshot) => {
+        if (cancelled) return;
+        setEditBase(snapshot.base);
+        setDraft(loadEditDraft(resourceId) ?? snapshot.draft);
+        setEditLoading(false);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setEditError(
+          error instanceof Error ? error : new Error("The resource could not be loaded.")
+        );
+        setEditLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resourceId]);
+
+  // Load a new-resource draft from storage on mount.
+  useEffect(() => {
+    if (resourceId !== undefined) return;
     const stored = loadDraftFromStorage();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraft(stored || createEmptyDraft());
-  }, []);
+  }, [resourceId]);
 
-  // Auto-save draft to localStorage whenever it changes
+  // Auto-save the draft to the matching storage scope whenever it changes.
   useEffect(() => {
     if (draft && unsavedChanges) {
-      saveDraftToStorage(draft);
+      if (resourceId === undefined) {
+        saveDraftToStorage(draft);
+      } else {
+        saveEditDraft(resourceId, draft);
+      }
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setUnsavedChanges(false);
     }
-  }, [draft, unsavedChanges]);
+  }, [draft, resourceId, unsavedChanges]);
+
+  if (editLoading) {
+    return <LoadingState label="Loading current resource version" />;
+  }
+
+  if (editError !== null) {
+    return (
+      <ErrorState
+        code="RESOURCE_UNAVAILABLE"
+        description={editError.message}
+        title="Resource unavailable"
+      />
+    );
+  }
 
   if (!draft) {
     return null;
@@ -69,17 +134,17 @@ export function ResourceWizard({ onCancel, onPublish, sellerId }: ResourceWizard
   }
 
   function handleNext() {
-    const stepIndex = STEPS.findIndex((s) => s.id === currentStep);
-    if (stepIndex < STEPS.length - 1) {
-      setCurrentStep(STEPS[stepIndex + 1]!.id);
+    const stepIndex = steps.findIndex((s) => s.id === currentStep);
+    if (stepIndex < steps.length - 1) {
+      setCurrentStep(steps[stepIndex + 1]!.id);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
 
   function handlePrev() {
-    const stepIndex = STEPS.findIndex((s) => s.id === currentStep);
+    const stepIndex = steps.findIndex((s) => s.id === currentStep);
     if (stepIndex > 0) {
-      setCurrentStep(STEPS[stepIndex - 1]!.id);
+      setCurrentStep(steps[stepIndex - 1]!.id);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
@@ -97,7 +162,7 @@ export function ResourceWizard({ onCancel, onPublish, sellerId }: ResourceWizard
     }
   }
 
-  const currentStepIndex = STEPS.findIndex((s) => s.id === currentStep);
+  const currentStepIndex = steps.findIndex((s) => s.id === currentStep);
 
   return (
     <div className="space-y-6">
@@ -106,14 +171,14 @@ export function ResourceWizard({ onCancel, onPublish, sellerId }: ResourceWizard
         <div className="h-1 w-full bg-slate-200">
           <div
             className="h-full bg-teal-600 transition-all"
-            style={{ width: `${((currentStepIndex + 1) / STEPS.length) * 100}%` }}
+            style={{ width: `${((currentStepIndex + 1) / steps.length) * 100}%` }}
           />
         </div>
       </Card>
 
       {/* Steps indicator */}
       <div className="flex gap-2 overflow-x-auto pb-2">
-        {STEPS.map((step, index) => (
+        {steps.map((step, index) => (
           <button
             key={step.id}
             onClick={() => setCurrentStep(step.id)}
@@ -133,8 +198,8 @@ export function ResourceWizard({ onCancel, onPublish, sellerId }: ResourceWizard
 
       {/* Current step description */}
       <div>
-        <h1 className="text-2xl font-bold text-slate-950">{STEPS[currentStepIndex]?.label}</h1>
-        <p className="mt-1 text-slate-600">{STEPS[currentStepIndex]?.description}</p>
+        <h1 className="text-2xl font-bold text-slate-950">{steps[currentStepIndex]?.label}</h1>
+        <p className="mt-1 text-slate-600">{steps[currentStepIndex]?.description}</p>
       </div>
 
       {/* Step content */}
@@ -177,6 +242,23 @@ export function ResourceWizard({ onCancel, onPublish, sellerId }: ResourceWizard
           />
         )}
 
+        {currentStep === "review" && draft && editBase !== null && (
+          <ResourceEditReview
+            base={editBase}
+            draft={draft}
+            onBack={handlePrev}
+            onReplaceVersion={({ base, draft: replacement }) => {
+              setEditBase(base);
+              setDraft(replacement);
+              setUnsavedChanges(true);
+            }}
+            onSaved={() => {
+              if (resourceId !== undefined) clearEditDraft(resourceId);
+              onPublish?.(draft);
+            }}
+          />
+        )}
+
         {currentStep === "publish" && draft && (
           <ResourceWizardPublish
             draft={draft}
@@ -194,7 +276,7 @@ export function ResourceWizard({ onCancel, onPublish, sellerId }: ResourceWizard
           Save and exit
         </Button>
         <p className="text-xs text-slate-500">
-          Step {currentStepIndex + 1} of {STEPS.length}
+          Step {currentStepIndex + 1} of {steps.length}
         </p>
       </div>
     </div>
