@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import type { Receipt, Resource, Seller } from "@/services/api/schemas";
 
+import { ResourceHealthPanel } from "./resource-health";
+
 type ResourceDetailSummaryProps = {
   receipts: Receipt[];
   resource: Resource;
@@ -39,6 +41,15 @@ export function ResourceDetailSummary({
           <Field label="Network" value={resource.network} />
           <Field label="Pay to" value={resource.payTo} wrap />
           <Field label="Status" value={resource.status} />
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <h2 className="text-lg font-semibold text-slate-950">Availability and freshness</h2>
+        </CardHeader>
+        <CardBody>
+          <ResourceHealthPanel resource={resource} />
         </CardBody>
       </Card>
 

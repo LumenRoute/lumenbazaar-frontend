@@ -9,6 +9,8 @@ import { apiClient } from "@/services/api/client";
 import { type ResourceDraft } from "@/services/resource-creation";
 import type { CreateResourceInput, ResourceValidationResult } from "@/services/api/schemas";
 
+import { useSellerSession } from "./seller-session-provider";
+
 type ResourceWizardPublishProps = {
   draft: ResourceDraft;
   onPrev: () => void;
@@ -24,6 +26,7 @@ export function ResourceWizardPublish({
   sellerId,
   isLoading = false
 }: ResourceWizardPublishProps) {
+  const { canMutate } = useSellerSession();
   const [validationResult, setValidationResult] = useState<ResourceValidationResult | null>(null);
   const [validating, setValidating] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -238,7 +241,11 @@ export function ResourceWizardPublish({
       <Card className="p-6">
         <div className="flex items-center justify-between">
           <div className="text-xs text-slate-500">
-            {validationResult?.valid ? "Ready to publish" : "Validation pending"}
+            {canMutate
+              ? validationResult?.valid
+                ? "Ready to publish"
+                : "Validation pending"
+              : "Re-authenticate to publish. Your draft is preserved."}
           </div>
           <div className="flex gap-2">
             <Button
@@ -252,7 +259,12 @@ export function ResourceWizardPublish({
             <Button
               onClick={handlePublish}
               disabled={
-                !validationResult?.valid || publishing || validating || isLoading || success
+                !canMutate ||
+                !validationResult?.valid ||
+                publishing ||
+                validating ||
+                isLoading ||
+                success
               }
               type="button"
             >

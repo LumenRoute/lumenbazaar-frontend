@@ -22,6 +22,8 @@ import {
 } from "@/services/resource-lifecycle";
 import { emptyStateForCollection, normalizeUiError } from "@/services/ui-state";
 
+import { useSellerSession } from "./seller-session-provider";
+
 const statusOptions: Array<{ label: string; value: ResourceStatus | "all" }> = [
   { label: "All", value: "all" },
   { label: "Active", value: "active" },
@@ -37,7 +39,7 @@ type LifecycleDialog = {
 export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sellerId?: string }) {
   const mode = loadRuntimeConfig().environment;
   const demo = isDemoMode(mode);
-  const queryClient = useQueryClient();
+  const { canMutate } = useSellerSession();
   const [status, setStatus] = useState<ResourceStatus | "all">("all");
   const [dialog, setDialog] = useState<LifecycleDialog | null>(null);
   const [reason, setReason] = useState("");
@@ -221,7 +223,8 @@ export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sell
                   <tbody className="divide-y divide-slate-200">
                     {resources.map((resource) => (
                       <ResourceRow
-                        editable={demo}
+                        disabled={disabledIds.has(resource.id)}
+                        editable={demo && canMutate}
                         key={resource.id}
                         onDisable={() => openDialog("disable", resource)}
                         onRestore={() => openDialog("restore", resource)}

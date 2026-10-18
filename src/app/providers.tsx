@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { TelemetryProvider } from "@/app/telemetry-context";
+import { SellerSessionProvider } from "@/components/seller/seller-session-provider";
 import { loadRuntimeConfig } from "@/config/runtime";
 import { createQueryClient } from "@/services/api/query";
 import {
@@ -72,7 +73,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TelemetryProvider service={telemetryService}>{children}</TelemetryProvider>
+      <TelemetryProvider service={telemetryService}>
+        <SellerSessionProvider>{children}</SellerSessionProvider>
+      </TelemetryProvider>
     </QueryClientProvider>
   );
 }

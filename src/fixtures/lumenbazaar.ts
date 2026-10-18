@@ -70,9 +70,17 @@ export const demoResources: Resource[] = [
     amount: "0.0500000",
     assetCode: "USDC",
     assetIssuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+    availability: {
+      catalogUpdatedAt: "2026-10-18T09:00:00.000Z",
+      lastProbeAt: "2026-10-18T09:05:00.000Z",
+      lastSuccessfulProbeAt: "2026-10-18T09:05:00.000Z",
+      source: "synthetic demo prober",
+      status: "healthy"
+    },
     createdAt: "2026-09-02T14:00:00.000Z",
     description: "Returns current weather observations for a city with source and freshness data.",
     extensions: {
+      assetContract: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
       bazaar: true,
       metadataQuality: 0.96,
       recentSettlementStatus: "settled",
@@ -118,9 +126,17 @@ export const demoResources: Resource[] = [
     amount: "0.1200000",
     assetCode: "USDC",
     assetIssuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+    availability: {
+      catalogUpdatedAt: "2026-09-28T09:00:00.000Z",
+      lastProbeAt: "2026-10-15T09:00:00.000Z",
+      lastSuccessfulProbeAt: "2026-10-15T09:00:00.000Z",
+      source: "synthetic demo prober",
+      status: "degraded"
+    },
     createdAt: "2026-09-02T15:00:00.000Z",
     description: "Searches a curated Stellar development corpus and returns cited passages.",
     extensions: {
+      assetContract: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
       bazaar: true,
       metadataQuality: 0.89,
       mcp: {
@@ -191,7 +207,7 @@ export const demoSupportedPaymentSchemes: SupportedPaymentSchemes = supportedSch
         assets: [
           {
             code: "USDC",
-            contractId: "CA7QYNF7SOWQ4VJNMGEVXZHYQACUIM2MRRPFNQ4SLRJRYE67Z2BJQXMR",
+            contractId: "CB256KDRXDO2FYJN3YBYZE5KCU46WIIE67DRP5T7HI45DRH2GM6YOJFS",
             decimals: 7,
             issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
           }
