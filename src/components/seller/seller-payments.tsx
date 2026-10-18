@@ -1,13 +1,14 @@
 import { ChevronLeft, ChevronRight, ExternalLink, Loader2, ReceiptText } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState, ErrorState } from "@/components/ui/surfaces";
+import { ExportMenu } from "@/components/ui/export-menu";
 import { isDemoMode, loadRuntimeConfig } from "@/config/runtime";
 import { useCursorPagination } from "@/hooks/useCursorPagination";
 import {
@@ -16,13 +17,17 @@ import {
   loadSellerPaymentActivity,
   paymentActivityStatus,
   shortHash,
+  exportToJSON,
+  exportToCSV,
   type PaymentActivity
 } from "@/services/payments";
+import { generateExportFileName, triggerExport } from "@/lib/export-utils";
 import { emptyStateForCollection } from "@/services/ui-state";
 
 export function SellerPayments({ sellerId = "seller_atlas_weather" }: { sellerId?: string }) {
   const mode = loadRuntimeConfig().environment;
   const searchParams = useSearchParams();
+  const [isExporting, setIsExporting] = useState(false);
 
   if (!isDemoMode(mode)) {
     return (
@@ -91,6 +96,30 @@ export function SellerPayments({ sellerId = "seller_atlas_weather" }: { sellerId
     previousSellerIdRef.current = sellerId;
   }
 
+  const handleExportJSON = useCallback(() => {
+    try {
+      setIsExporting(true);
+      const json = exportToJSON(paginatedActivity, { sellerId }, "demo");
+      triggerExport("json", json);
+    } catch (error) {
+      console.error("Export failed:", error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [paginatedActivity, sellerId]);
+
+  const handleExportCSV = useCallback(() => {
+    try {
+      setIsExporting(true);
+      const csv = exportToCSV(paginatedActivity, { sellerId }, "demo");
+      triggerExport("csv", csv);
+    } catch (error) {
+      console.error("Export failed:", error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [paginatedActivity, sellerId]);
+
   const emptyState = emptyStateForCollection("payments");
 
   return (
@@ -132,12 +161,23 @@ export function SellerPayments({ sellerId = "seller_atlas_weather" }: { sellerId
       ) : (
         <Card>
           <CardHeader className="flex flex-col gap-1">
-            <h2 className="text-lg font-semibold text-slate-950">Recent activity</h2>
-            <p className="text-sm text-slate-600">
-              {paginatedActivity.length > 0
-                ? `${paginatedActivity.length} record${paginatedActivity.length !== 1 ? "s" : ""} on this page`
-                : "Loading..."}
-            </p>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <h2 className="text-lg font-semibold text-slate-950">Recent activity</h2>
+                <p className="text-sm text-slate-600 mt-1">
+                  {paginatedActivity.length > 0
+                    ? `${paginatedActivity.length} record${paginatedActivity.length !== 1 ? "s" : ""} on this page`
+                    : "Loading..."}
+                </p>
+              </div>
+              <ExportMenu
+                onExportJSON={handleExportJSON}
+                onExportCSV={handleExportCSV}
+                disabled={paginatedActivity.length === 0}
+                isLoading={isExporting}
+                tooltipLabel="Export current page as JSON or CSV"
+              />
+            </div>
           </CardHeader>
           <CardBody className="relative overflow-x-auto">
             {isLoading && (

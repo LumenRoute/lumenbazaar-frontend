@@ -6,6 +6,9 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { tryFormatAmount } from "@/lib/amount-formatter";
+import { exportToJSON, exportToCSV } from "@/services/payments";
+import { generateExportFileName, triggerExport } from "@/lib/export-utils";
+import { ExportMenu } from "@/components/ui/export-menu";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +48,7 @@ export function TransactionDashboard() {
   const [asset, setAsset] = useState("all");
   const [sellerId, setSellerId] = useState("all");
   const [date, setDate] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
 
   // Get unfilterable activity for filter options
   const unfilteredActivity = useMemo(
@@ -143,6 +147,30 @@ export function TransactionDashboard() {
     setDate("");
     resetPagination();
   }, [resetPagination]);
+
+  const handleExportJSON = useCallback(() => {
+    try {
+      setIsExporting(true);
+      const json = exportToJSON(paginatedActivity, paginationFilters, "demo");
+      triggerExport("json", json);
+    } catch (error) {
+      console.error("Export failed:", error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [paginatedActivity, paginationFilters]);
+
+  const handleExportCSV = useCallback(() => {
+    try {
+      setIsExporting(true);
+      const csv = exportToCSV(paginatedActivity, paginationFilters, "demo");
+      triggerExport("csv", csv);
+    } catch (error) {
+      console.error("Export failed:", error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [paginatedActivity, paginationFilters]);
 
   if (!demo) {
     return (
@@ -296,12 +324,23 @@ export function TransactionDashboard() {
         ) : (
           <Card>
             <CardHeader className="flex flex-col gap-1">
-              <h2 className="text-lg font-semibold text-slate-950">Payment activity</h2>
-              <p className="text-sm text-slate-600">
-                {paginatedActivity.length > 0
-                  ? `${paginatedActivity.length} record${paginatedActivity.length !== 1 ? "s" : ""} on this page`
-                  : "Loading..."}
-              </p>
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <h2 className="text-lg font-semibold text-slate-950">Payment activity</h2>
+                  <p className="text-sm text-slate-600 mt-1">
+                    {paginatedActivity.length > 0
+                      ? `${paginatedActivity.length} record${paginatedActivity.length !== 1 ? "s" : ""} on this page`
+                      : "Loading..."}
+                  </p>
+                </div>
+                <ExportMenu
+                  onExportJSON={handleExportJSON}
+                  onExportCSV={handleExportCSV}
+                  disabled={paginatedActivity.length === 0}
+                  isLoading={isExporting}
+                  tooltipLabel="Export current page as JSON or CSV"
+                />
+              </div>
             </CardHeader>
             <CardBody className="relative overflow-x-auto">
               {isLoading && (
