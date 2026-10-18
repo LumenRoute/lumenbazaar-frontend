@@ -13,6 +13,7 @@ export function createQueryClient() {
 }
 
 export const queryKeys = {
+  comparison: (resourceIds: string[]) => ["comparison", resourceIds] as const,
   conformance: ["conformance"] as const,
   dashboard: ["dashboard"] as const,
   health: ["health"] as const,

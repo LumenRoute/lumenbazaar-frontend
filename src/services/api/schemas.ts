@@ -225,6 +225,15 @@ export const sellerSchema = z.object({
 
 export type Seller = z.infer<typeof sellerSchema>;
 
+export const sellerSessionSchema = z.object({
+  expiresAt: z.string(),
+  issuedAt: z.string(),
+  seller: sellerSchema,
+  sessionId: z.string()
+});
+
+export type SellerSessionRecord = z.infer<typeof sellerSessionSchema>;
+
 export const createSellerInputSchema = z.object({
   displayName: z.string().trim().min(1).max(120),
   domain: z.string().trim().min(1),
@@ -250,10 +259,22 @@ export const resourceStatusSchema = z.enum(["draft", "active", "inactive"]);
 export type ResourceType = z.infer<typeof resourceTypeSchema>;
 export type ResourceStatus = z.infer<typeof resourceStatusSchema>;
 
+export const resourceAvailabilitySchema = z.object({
+  catalogUpdatedAt: z.string().optional(),
+  lastProbeAt: z.string().optional(),
+  lastSuccessfulProbeAt: z.string().nullable().optional(),
+  message: z.string().optional(),
+  source: z.string().optional(),
+  status: z.enum(["healthy", "degraded", "unavailable", "unknown"])
+});
+
+export type ResourceAvailability = z.infer<typeof resourceAvailabilitySchema>;
+
 export const resourceSchema = z.object({
   amount: z.string(),
   assetCode: z.string(),
   assetIssuer: z.string(),
+  availability: resourceAvailabilitySchema.optional(),
   createdAt: z.string(),
   description: z.string(),
   extensions: jsonObjectSchema,
