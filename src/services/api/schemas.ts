@@ -125,6 +125,36 @@ export const readinessSchema = z.object({
 
 export type Readiness = z.infer<typeof readinessSchema>;
 
+/**
+ * Zod schema for SEP-41 asset metadata validation.
+ * Used to validate asset metadata loaded from network configuration.
+ */
+export const assetMetadataSchema = z.object({
+  contractId: z
+    .string()
+    .refine(
+      isValidSorobanContractId,
+      "Contract ID must be a valid Soroban contract address (C followed by 55 base32 characters)"
+    ),
+  decimals: z
+    .number()
+    .int()
+    .min(0, "Decimals must be at least 0")
+    .max(7, "Decimals must not exceed 7"),
+  issuer: z
+    .string()
+    .refine(
+      isValidStellarAccountAddress,
+      "Issuer must be a valid Stellar account address"
+    )
+    .optional(),
+  symbol: z
+    .string()
+    .refine(isValidAssetCode, "Symbol must be 1-12 alphanumeric characters")
+});
+
+export type AssetMetadata = z.infer<typeof assetMetadataSchema>;
+
 const supportedAssetSchema = z.object({
   code: z
     .string()

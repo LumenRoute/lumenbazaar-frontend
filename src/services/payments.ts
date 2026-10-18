@@ -38,6 +38,55 @@ export type PaymentActivityFilters = {
   status?: PaymentActivityStatus;
 };
 
+/**
+ * Allowlisted fields for settlement evidence export.
+ * Only these fields are included when exporting PaymentActivity records as JSON or CSV.
+ * Fields not on this allowlist are explicitly dropped to prevent accidental data leakage.
+ */
+export type ReceiptExportRecord = {
+  attempt_id: string;
+  attempt_created_at: string;
+  network: string;
+  asset_code: string;
+  amount: string;
+  status: string;
+  seller_id: string;
+  resource_id: string;
+  failure_code: string | null;
+  failure_reason: string | null;
+  receipt_id: string | null;
+  receipt_status: string | null;
+  transaction_hash: string | null;
+  correlation_id: string | null;
+  receipt_created_at: string | null;
+  settlement_id: string | null;
+  ledger: number | null;
+};
+
+/**
+ * Metadata included with every settlement evidence export.
+ */
+export type ExportMetadata = {
+  exportTimestamp: string; // ISO-8601 UTC
+  evidenceSource: "live" | "demo";
+  activeFilters: PaymentActivityFilters;
+  pageInfo: {
+    pageSize: number;
+    recordsOnThisPage: number;
+  };
+};
+
+/**
+ * Paginated response for payment activity.
+ * Cursors are opaque tokens managed entirely by the backend.
+ * Clients must never construct, modify, or decode cursors.
+ */
+export type PaginatedPaymentActivityResponse = {
+  items: PaymentActivity[];
+  nextCursor?: string; // Undefined if on final page
+  previousCursor?: string; // Undefined if on first page
+};
+
 export type SellerResourceFilters = {
   asset?: string;
   network?: NetworkId;
@@ -245,4 +294,185 @@ function demoPaymentResources() {
 
 function sameUtcDate(value: string, date: string) {
   return value.slice(0, 10) === date;
+}
+
+/**
+ * Sanitizes a PaymentActivity for export, returning only allowlisted fields.
+ * Redacts forbidden fields (signatures, auth entries, secrets, raw error messages).
+ * Preserves amounts and identifiers as strings to maintain precision.
+ *
+ * @param activity The PaymentActivity to sanitize
+ * @returns A ReceiptExportRecord containing only allowlisted fields
+ */
+export function sanitizeReceiptForExport(activity: PaymentActivity): ReceiptExportRecord {
+  return {
+    attempt_id: activity.attempt.id,
+    attempt_created_at: activity.attempt.createdAt,
+    network: activity.attempt.network,
+    asset_code: activity.attempt.assetCode,
+    amount: activity.attempt.amount, // Preserve as string, never convert to number
+    status: paymentActivityStatus(activity),
+    seller_id: activity.attempt.sellerId,
+    resource_id: activity.attempt.resourceId,
+    failure_code: activity.attempt.failureCode,
+    failure_reason: activity.attempt.failureReason,
+    receipt_id: activity.receipt?.id ?? null,
+    receipt_status: activity.receipt?.status ?? null,
+    transaction_hash: activity.settlement?.transactionHash ?? activity.receipt?.transactionHash ?? null,
+    correlation_id: activity.receipt?.correlationId ?? null,
+    receipt_created_at: activity.receipt?.createdAt ?? null,
+    settlement_id: activity.settlement?.id ?? null,
+    ledger: activity.settlement?.ledger ?? null
+  };
+}
+
+/**
+ * Escapes a value for safe CSV export, handling formula injection and RFC 4180 quoting.
+ * - Prefixes formula-injection payloads with single quote
+ * - Quotes cells containing commas, quotes, or newlines
+ * - Escapes internal quotes as double-quotes per RFC 4180
+ *
+ * @param value The value to escape (can be string, number, boolean, or null)
+ * @returns The escaped value safe for CSV export
+ */
+function escapeCSVValue(value: string | number | boolean | null): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  // Convert to string
+  let str = String(value);
+
+  // Protect against formula injection (=, +, -, @, tab)
+  if (/^[=+\-@\t]/.test(str)) {
+    str = "'" + str;
+  }
+
+  // RFC 4180: Quote if contains comma, quote, or newline
+  if (/[",\n]/.test(str)) {
+    // Escape internal quotes by doubling them
+    str = '"' + str.replace(/"/g, '""') + '"';
+  }
+
+  return str;
+}
+
+/**
+ * Exports sanitized payment activities as JSON with metadata.
+ * Generates a valid JSON document containing metadata and records.
+ *
+ * @param activities The payment activities to export
+ * @param filters The active filters applied at export time
+ * @param evidenceSource Whether data is from live API or demo fixtures
+ * @returns A JSON string ready for file download
+ */
+export function exportToJSON(
+  activities: PaymentActivity[],
+  filters: PaymentActivityFilters = {},
+  evidenceSource: "live" | "demo" = "demo"
+): string {
+  const sanitized = activities.map(sanitizeReceiptForExport);
+
+  const metadata: ExportMetadata = {
+    exportTimestamp: new Date().toISOString(),
+    evidenceSource,
+    activeFilters: filters,
+    pageInfo: {
+      pageSize: sanitized.length,
+      recordsOnThisPage: sanitized.length
+    }
+  };
+
+  const exportData = {
+    metadata,
+    records: sanitized
+  };
+
+  return JSON.stringify(exportData, null, 2);
+}
+
+/**
+ * Exports sanitized payment activities as CSV with metadata block and RFC 4180 compliance.
+ * Includes UTF-8 BOM for Excel compatibility.
+ *
+ * @param activities The payment activities to export
+ * @param filters The active filters applied at export time
+ * @param evidenceSource Whether data is from live API or demo fixtures
+ * @returns A CSV string with BOM ready for file download
+ */
+export function exportToCSV(
+  activities: PaymentActivity[],
+  filters: PaymentActivityFilters = {},
+  evidenceSource: "live" | "demo" = "demo"
+): string {
+  const sanitized = activities.map(sanitizeReceiptForExport);
+
+  const metadata: ExportMetadata = {
+    exportTimestamp: new Date().toISOString(),
+    evidenceSource,
+    activeFilters: filters,
+    pageInfo: {
+      pageSize: sanitized.length,
+      recordsOnThisPage: sanitized.length
+    }
+  };
+
+  const lines: string[] = [];
+
+  // Metadata block (human-readable, not machine-parseable as data)
+  lines.push('Metadata,,');
+  lines.push(`exportTimestamp,${escapeCSVValue(metadata.exportTimestamp)},`);
+  lines.push(`evidenceSource,${escapeCSVValue(metadata.evidenceSource)},`);
+
+  // Active filters
+  Object.entries(metadata.activeFilters).forEach(([key, value]) => {
+    if (value !== undefined) {
+      lines.push(`activeFilters_${key},${escapeCSVValue(String(value))},`);
+    }
+  });
+
+  // Page info
+  lines.push(`pageInfo_pageSize,${metadata.pageInfo.pageSize},`);
+  lines.push(`pageInfo_recordsOnThisPage,${metadata.pageInfo.recordsOnThisPage},`);
+
+  // Empty line before data
+  lines.push(',,');
+
+  // Header row (column names from ReceiptExportRecord keys)
+  const headers: (keyof ReceiptExportRecord)[] = [
+    'attempt_id',
+    'attempt_created_at',
+    'network',
+    'asset_code',
+    'amount',
+    'status',
+    'seller_id',
+    'resource_id',
+    'failure_code',
+    'failure_reason',
+    'receipt_id',
+    'receipt_status',
+    'transaction_hash',
+    'correlation_id',
+    'receipt_created_at',
+    'settlement_id',
+    'ledger'
+  ];
+
+  lines.push(headers.map(escapeCSVValue).join(','));
+
+  // Data rows
+  sanitized.forEach((record) => {
+    const row = headers.map((header) => {
+      const value = record[header];
+      return escapeCSVValue(value);
+    });
+    lines.push(row.join(','));
+  });
+
+  // Combine with UTF-8 BOM
+  const csv = lines.join('\n');
+  const bom = '\ufeff'; // UTF-8 BOM
+
+  return bom + csv;
 }

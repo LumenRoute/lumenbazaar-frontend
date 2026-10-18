@@ -1,23 +1,33 @@
-import { ExternalLink, ReceiptText } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Loader2, ReceiptText } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState, ErrorState } from "@/components/ui/surfaces";
+import { ExportMenu } from "@/components/ui/export-menu";
 import { isDemoMode, loadRuntimeConfig } from "@/config/runtime";
+import { useCursorPagination } from "@/hooks/useCursorPagination";
 import {
   explorerTransactionUrl,
   formatPaymentAmount,
   loadSellerPaymentActivity,
   paymentActivityStatus,
   shortHash,
+  exportToJSON,
+  exportToCSV,
   type PaymentActivity
 } from "@/services/payments";
+import { generateExportFileName, triggerExport } from "@/lib/export-utils";
 import { emptyStateForCollection } from "@/services/ui-state";
 
 export function SellerPayments({ sellerId = "seller_atlas_weather" }: { sellerId?: string }) {
   const mode = loadRuntimeConfig().environment;
+  const searchParams = useSearchParams();
+  const [isExporting, setIsExporting] = useState(false);
 
   if (!isDemoMode(mode)) {
     return (
@@ -35,7 +45,81 @@ export function SellerPayments({ sellerId = "seller_atlas_weather" }: { sellerId
     );
   }
 
-  const activity = loadSellerPaymentActivity(sellerId, mode);
+  // Track previous sellerId to reset pagination if prop changes
+  const previousSellerIdRef = useRef(sellerId);
+  const sellerIdChanged = previousSellerIdRef.current !== sellerId;
+
+  // Pagination hook for cursor-based navigation
+  const {
+    rows: paginatedActivity,
+    isLoading,
+    error,
+    hasNextPage,
+    hasPreviousPage,
+    nextPage,
+    previousPage,
+    resetPagination
+  } = useCursorPagination({
+    queryFn: async (cursor) => {
+      const allActivity = loadSellerPaymentActivity(sellerId, mode);
+      // Implement simple cursor-based pagination
+      const pageSize = 10;
+      const allItems = allActivity.sort(
+        (a, b) => new Date(b.attempt.createdAt).getTime() - new Date(a.attempt.createdAt).getTime()
+      );
+
+      let startIndex = 0;
+      if (cursor) {
+        startIndex = parseInt(cursor, 10);
+        if (isNaN(startIndex)) {
+          startIndex = 0;
+        }
+      }
+
+      const items = allItems.slice(startIndex, startIndex + pageSize);
+      const nextCursor = startIndex + pageSize < allItems.length ? (startIndex + pageSize).toString() : undefined;
+      const previousCursor = startIndex > 0 ? Math.max(0, startIndex - pageSize).toString() : undefined;
+
+      return {
+        items,
+        nextCursor,
+        previousCursor
+      };
+    },
+    getKey: (item) => item.attempt.id,
+    urlSearchParams: searchParams as any
+  });
+
+  // Reset pagination if sellerId prop changes
+  if (sellerIdChanged) {
+    resetPagination();
+    previousSellerIdRef.current = sellerId;
+  }
+
+  const handleExportJSON = useCallback(() => {
+    try {
+      setIsExporting(true);
+      const json = exportToJSON(paginatedActivity, { sellerId }, "demo");
+      triggerExport("json", json);
+    } catch (error) {
+      console.error("Export failed:", error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [paginatedActivity, sellerId]);
+
+  const handleExportCSV = useCallback(() => {
+    try {
+      setIsExporting(true);
+      const csv = exportToCSV(paginatedActivity, { sellerId }, "demo");
+      triggerExport("csv", csv);
+    } catch (error) {
+      console.error("Export failed:", error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [paginatedActivity, sellerId]);
+
   const emptyState = emptyStateForCollection("payments");
 
   return (
@@ -47,24 +131,63 @@ export function SellerPayments({ sellerId = "seller_atlas_weather" }: { sellerId
 
       <div className="mb-4 flex flex-wrap gap-2">
         <Badge tone="warning">Explicit demo data</Badge>
-        {activity[0] ? (
+        {paginatedActivity[0] ? (
           <Badge tone="neutral">
-            Loaded {new Date(activity[0].attempt.createdAt).toLocaleString()}
+            Loaded {new Date(paginatedActivity[0].attempt.createdAt).toLocaleString()}
           </Badge>
         ) : null}
       </div>
 
-      {activity.length === 0 ? (
+      {/* Error state for pagination */}
+      {error ? (
+        <Card>
+          <CardBody className="flex items-start gap-3 bg-red-50 p-4">
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-900">{error.message}</p>
+            </div>
+            <Button
+              onClick={resetPagination}
+              size="sm"
+              variant="secondary"
+            >
+              Start over
+            </Button>
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {paginatedActivity.length === 0 && !isLoading ? (
         <EmptyState title={emptyState.title} description={emptyState.description} />
       ) : (
         <Card>
           <CardHeader className="flex flex-col gap-1">
-            <h2 className="text-lg font-semibold text-slate-950">Recent activity</h2>
-            <p className="text-sm text-slate-600">
-              {activity.length} attempts across published resources
-            </p>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <h2 className="text-lg font-semibold text-slate-950">Recent activity</h2>
+                <p className="text-sm text-slate-600 mt-1">
+                  {paginatedActivity.length > 0
+                    ? `${paginatedActivity.length} record${paginatedActivity.length !== 1 ? "s" : ""} on this page`
+                    : "Loading..."}
+                </p>
+              </div>
+              <ExportMenu
+                onExportJSON={handleExportJSON}
+                onExportCSV={handleExportCSV}
+                disabled={paginatedActivity.length === 0}
+                isLoading={isExporting}
+                tooltipLabel="Export current page as JSON or CSV"
+              />
+            </div>
           </CardHeader>
-          <CardBody className="overflow-x-auto">
+          <CardBody className="relative overflow-x-auto">
+            {isLoading && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-md bg-white/50 backdrop-blur-sm z-10">
+                <div className="flex items-center gap-2 text-slate-600">
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  <span className="text-sm">Loading page...</span>
+                </div>
+              </div>
+            )}
             <table className="w-full min-w-[840px] text-left text-sm">
               <thead className="text-xs uppercase text-slate-500">
                 <tr>
@@ -77,12 +200,41 @@ export function SellerPayments({ sellerId = "seller_atlas_weather" }: { sellerId
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {activity.map((item) => (
+                {paginatedActivity.map((item) => (
                   <PaymentRow activity={item} key={item.attempt.id} />
                 ))}
               </tbody>
             </table>
           </CardBody>
+
+          {/* Pagination controls */}
+          <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4">
+            <Button
+              onClick={previousPage}
+              disabled={!hasPreviousPage || isLoading}
+              variant="secondary"
+              size="sm"
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+              Previous
+            </Button>
+
+            <span className="text-sm text-slate-600">
+              {hasPreviousPage || hasNextPage ? "Paginated view" : "Only page"}
+            </span>
+
+            <Button
+              onClick={nextPage}
+              disabled={!hasNextPage || isLoading}
+              variant="secondary"
+              size="sm"
+              aria-label="Next page"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </div>
         </Card>
       )}
     </>
@@ -146,7 +298,7 @@ function PaymentRow({ activity }: { activity: PaymentActivity }) {
           {transactionHash ? (
             <a
               className="inline-flex min-h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-2 text-slate-700 hover:bg-slate-50"
-              href={explorerTransactionUrl(activity.attempt.network, transactionHash)}
+              href={explorerTransactionUrl(activity.attempt.network, transactionHash) || ""}
               rel="noreferrer"
               target="_blank"
             >

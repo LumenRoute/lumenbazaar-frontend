@@ -1,19 +1,25 @@
 "use client";
 
-import { ExternalLink, Filter, ReceiptText, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Filter, Loader2, ReceiptText, X } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useMemo, useRef, useState } from "react";
 
+import { tryFormatAmount } from "@/lib/amount-formatter";
+import { exportToJSON, exportToCSV } from "@/services/payments";
+import { generateExportFileName, triggerExport } from "@/lib/export-utils";
+import { ExportMenu } from "@/components/ui/export-menu";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState, ErrorState } from "@/components/ui/surfaces";
+import { FormattedAmountDisplay } from "@/components/ui/formatted-amount";
 import type { NetworkId } from "@/config/networks";
 import { isDemoMode, loadRuntimeConfig } from "@/config/runtime";
+import { useCursorPagination } from "@/hooks/useCursorPagination";
 import {
   explorerTransactionUrl,
-  formatPaymentAmount,
   isSyntheticTransactionId,
   isValidTransactionHash,
   loadPaymentActivity,
@@ -35,35 +41,89 @@ const allStatuses: Array<PaymentActivityStatus | "all"> = [
 export function TransactionDashboard() {
   const mode = loadRuntimeConfig().environment;
   const demo = isDemoMode(mode);
+  const searchParams = useSearchParams();
+
   const [network, setNetwork] = useState<NetworkId | "all">("all");
   const [status, setStatus] = useState<PaymentActivityStatus | "all">("all");
   const [asset, setAsset] = useState("all");
   const [sellerId, setSellerId] = useState("all");
   const [date, setDate] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Get unfilterable activity for filter options
   const unfilteredActivity = useMemo(
     () => (demo ? loadPaymentActivity({}, mode) : []),
     [demo, mode]
   );
-  const activity = useMemo(
-    () =>
-      demo
-        ? loadPaymentActivity(
-            {
-              ...(asset === "all" ? {} : { asset }),
-              ...(date === "" ? {} : { date }),
-              ...(network === "all" ? {} : { network }),
-              ...(sellerId === "all" ? {} : { sellerId }),
-              ...(status === "all" ? {} : { status })
-            },
-            mode
-          )
-        : [],
-    [asset, date, demo, mode, network, sellerId, status]
+
+  // Build filters object
+  const paginationFilters = useMemo(
+    () => ({
+      ...(asset === "all" ? {} : { asset }),
+      ...(date === "" ? {} : { date }),
+      ...(network === "all" ? {} : { network }),
+      ...(sellerId === "all" ? {} : { sellerId }),
+      ...(status === "all" ? {} : { status })
+    }),
+    [asset, date, network, sellerId, status]
   );
+
+  // Track previous filters to detect changes
+  const previousFiltersRef = useRef(paginationFilters);
+  const filtersChanged = JSON.stringify(previousFiltersRef.current) !== JSON.stringify(paginationFilters);
+
+  // Pagination hook for cursor-based navigation
+  const {
+    rows: paginatedActivity,
+    isLoading,
+    error,
+    hasNextPage,
+    hasPreviousPage,
+    nextPage,
+    previousPage,
+    resetPagination
+  } = useCursorPagination({
+    queryFn: async (cursor) => {
+      const filtered = loadPaymentActivity(paginationFilters, mode);
+      // In demo mode, implement simple cursor-based pagination
+      const pageSize = 10;
+      const allItems = filtered.sort(
+        (a, b) => new Date(b.attempt.createdAt).getTime() - new Date(a.attempt.createdAt).getTime()
+      );
+
+      let startIndex = 0;
+      if (cursor) {
+        startIndex = parseInt(cursor, 10);
+        if (isNaN(startIndex)) {
+          startIndex = 0;
+        }
+      }
+
+      const items = allItems.slice(startIndex, startIndex + pageSize);
+      const nextCursor = startIndex + pageSize < allItems.length ? (startIndex + pageSize).toString() : undefined;
+      const previousCursor = startIndex > 0 ? Math.max(0, startIndex - pageSize).toString() : undefined;
+
+      return {
+        items,
+        nextCursor,
+        previousCursor
+      };
+    },
+    getKey: (item) => item.attempt.id,
+    urlSearchParams: searchParams as any
+  });
+
+  // Reset pagination when filters change
+  if (filtersChanged) {
+    resetPagination();
+    previousFiltersRef.current = paginationFilters;
+  }
+
   const assets = useMemo(
     () => [...new Set(unfilteredActivity.map((item) => item.attempt.assetCode))],
     [unfilteredActivity]
   );
+
   const sellers = useMemo(
     () => [
       ...new Map(
@@ -74,9 +134,43 @@ export function TransactionDashboard() {
     ],
     [unfilteredActivity]
   );
+
   const loadedAt = unfilteredActivity[0]?.attempt.createdAt;
   const hasFilters =
     network !== "all" || status !== "all" || asset !== "all" || sellerId !== "all" || date !== "";
+
+  const handleClearFilters = useCallback(() => {
+    setNetwork("all");
+    setStatus("all");
+    setAsset("all");
+    setSellerId("all");
+    setDate("");
+    resetPagination();
+  }, [resetPagination]);
+
+  const handleExportJSON = useCallback(() => {
+    try {
+      setIsExporting(true);
+      const json = exportToJSON(paginatedActivity, paginationFilters, "demo");
+      triggerExport("json", json);
+    } catch (error) {
+      console.error("Export failed:", error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [paginatedActivity, paginationFilters]);
+
+  const handleExportCSV = useCallback(() => {
+    try {
+      setIsExporting(true);
+      const csv = exportToCSV(paginatedActivity, paginationFilters, "demo");
+      triggerExport("csv", csv);
+    } catch (error) {
+      console.error("Export failed:", error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [paginatedActivity, paginationFilters]);
 
   if (!demo) {
     return (
@@ -192,13 +286,7 @@ export function TransactionDashboard() {
             {hasFilters ? (
               <div className="md:col-span-2 xl:col-span-5">
                 <Button
-                  onClick={() => {
-                    setNetwork("all");
-                    setStatus("all");
-                    setAsset("all");
-                    setSellerId("all");
-                    setDate("");
-                  }}
+                  onClick={handleClearFilters}
                   type="button"
                   variant="secondary"
                 >
@@ -210,7 +298,25 @@ export function TransactionDashboard() {
           </CardBody>
         </Card>
 
-        {activity.length === 0 ? (
+        {/* Error state for pagination */}
+        {error ? (
+          <Card>
+            <CardBody className="flex items-start gap-3 bg-red-50 p-4">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-red-900">{error.message}</p>
+              </div>
+              <Button
+                onClick={resetPagination}
+                size="sm"
+                variant="secondary"
+              >
+                Start over
+              </Button>
+            </CardBody>
+          </Card>
+        ) : null}
+
+        {paginatedActivity.length === 0 && !isLoading ? (
           <EmptyState
             title="No transactions match the filters"
             description="Clear filters or wait for verification and settlement activity to be indexed."
@@ -218,10 +324,33 @@ export function TransactionDashboard() {
         ) : (
           <Card>
             <CardHeader className="flex flex-col gap-1">
-              <h2 className="text-lg font-semibold text-slate-950">Payment activity</h2>
-              <p className="text-sm text-slate-600">{activity.length} attempt records loaded</p>
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <h2 className="text-lg font-semibold text-slate-950">Payment activity</h2>
+                  <p className="text-sm text-slate-600 mt-1">
+                    {paginatedActivity.length > 0
+                      ? `${paginatedActivity.length} record${paginatedActivity.length !== 1 ? "s" : ""} on this page`
+                      : "Loading..."}
+                  </p>
+                </div>
+                <ExportMenu
+                  onExportJSON={handleExportJSON}
+                  onExportCSV={handleExportCSV}
+                  disabled={paginatedActivity.length === 0}
+                  isLoading={isExporting}
+                  tooltipLabel="Export current page as JSON or CSV"
+                />
+              </div>
             </CardHeader>
-            <CardBody className="overflow-x-auto">
+            <CardBody className="relative overflow-x-auto">
+              {isLoading && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-md bg-white/50 backdrop-blur-sm z-10">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    <span className="text-sm">Loading page...</span>
+                  </div>
+                </div>
+              )}
               <table className="w-full min-w-[980px] text-left text-sm">
                 <thead className="text-xs uppercase text-slate-500">
                   <tr>
@@ -236,12 +365,41 @@ export function TransactionDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {activity.map((item) => (
+                  {paginatedActivity.map((item) => (
                     <TransactionRow activity={item} key={item.attempt.id} />
                   ))}
                 </tbody>
               </table>
             </CardBody>
+
+            {/* Pagination controls */}
+            <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4">
+              <Button
+                onClick={previousPage}
+                disabled={!hasPreviousPage || isLoading}
+                variant="secondary"
+                size="sm"
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                Previous
+              </Button>
+
+              <span className="text-sm text-slate-600">
+                {hasPreviousPage || hasNextPage ? "Paginated view" : "Only page"}
+              </span>
+
+              <Button
+                onClick={nextPage}
+                disabled={!hasNextPage || isLoading}
+                variant="secondary"
+                size="sm"
+                aria-label="Next page"
+              >
+                Next
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </div>
           </Card>
         )}
       </div>
@@ -252,6 +410,12 @@ export function TransactionDashboard() {
 function TransactionRow({ activity }: { activity: PaymentActivity }) {
   const status = paymentActivityStatus(activity);
   const transactionHash = activity.settlement?.transactionHash ?? activity.receipt?.transactionHash;
+
+  // Format the amount using network-specific asset metadata
+  const formattedAmount = useMemo(
+    () => tryFormatAmount(activity.attempt.amount, activity.attempt.assetCode, activity.attempt.network),
+    [activity.attempt.amount, activity.attempt.assetCode, activity.attempt.network]
+  );
 
   return (
     <tr className="align-top">
@@ -283,10 +447,12 @@ function TransactionRow({ activity }: { activity: PaymentActivity }) {
       <td className="px-3 py-3">
         <Badge tone={transactionTone(status)}>{status}</Badge>
       </td>
-      <td className="px-3 py-3 text-slate-700">
-        <span className="block">
-          {formatPaymentAmount(activity.attempt.amount, activity.attempt.assetCode)}
-        </span>
+      <td className="px-3 py-3">
+        <FormattedAmountDisplay
+          fallbackContractId={activity.attempt.assetCode}
+          formattedAmount={formattedAmount}
+          showAtomic={false}
+        />
         <span className="block break-all text-xs text-slate-500">{activity.attempt.network}</span>
       </td>
       <td className="px-3 py-3 text-slate-700">
