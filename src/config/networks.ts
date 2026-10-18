@@ -3,6 +3,21 @@ import { z } from "zod";
 export const networkIdSchema = z.enum(["stellar:testnet", "stellar:pubnet"]);
 export type NetworkId = z.infer<typeof networkIdSchema>;
 
+/**
+ * SEP-41 Asset metadata for a Soroban contract-wrapped asset.
+ * Each asset is uniquely identified by its contract ID on a specific network.
+ */
+export type AssetMetadata = {
+  /** Soroban contract ID (C* format) for this asset */
+  contractId: string;
+  /** Asset symbol/code (1-12 alphanumeric characters) */
+  symbol: string;
+  /** Number of decimal places (0–7) for human-readable formatting */
+  decimals: number;
+  /** Optional Stellar issuer account for cross-reference */
+  issuer?: string;
+};
+
 export type NetworkConfig = {
   id: NetworkId;
   label: string;
@@ -12,10 +27,20 @@ export type NetworkConfig = {
   explorerUrl: string;
   defaultAssetCode: string;
   defaultAssetIssuer: string;
+  /** Catalog of known SEP-41 assets on this network, keyed by contract ID */
+  assets: AssetMetadata[];
 };
 
 export const stellarNetworks: Record<NetworkId, NetworkConfig> = {
   "stellar:pubnet": {
+    assets: [
+      {
+        contractId: "CA7QYNF7SOWQ4VJNMGEVXZHYQACUIM2MRRPFNQ4SLRJRYE67Z2BJQXMR",
+        decimals: 6,
+        issuer: "GA5ZSEJYB37ENSHJTCQ6GUQ5O6GXJYUYRTP6ESFXUW77K5STH6E3BQI6",
+        symbol: "USDC"
+      }
+    ],
     defaultAssetCode: "USDC",
     defaultAssetIssuer: "GA5ZSEJYB37ENSHJTCQ6GUQ5O6GXJYUYRTP6ESFXUW77K5STH6E3BQI6",
     explorerUrl: "https://stellar.expert/explorer/public",
@@ -26,6 +51,19 @@ export const stellarNetworks: Record<NetworkId, NetworkConfig> = {
     rpcUrl: "https://mainnet.sorobanrpc.com"
   },
   "stellar:testnet": {
+    assets: [
+      {
+        contractId: "CBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE",
+        decimals: 6,
+        issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+        symbol: "USDC"
+      },
+      {
+        contractId: "CBQYB6MKFOPG7BWBT5H3KK43L2CQFWW5J2VJPWMVSWWFDMLZTFGZW7FY",
+        decimals: 7,
+        symbol: "BRL"
+      }
+    ],
     defaultAssetCode: "USDC",
     defaultAssetIssuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
     explorerUrl: "https://stellar.expert/explorer/testnet",
