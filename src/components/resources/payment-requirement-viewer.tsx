@@ -1,7 +1,7 @@
 "use client";
 
-import { Clipboard, ReceiptText, TriangleAlert } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Clipboard, ReceiptText, TriangleAlert, AlertTriangle } from "lucide-react";
+import { useMemo, useState, useRef, useEffect } from "react";
 
 import { tryFormatAmount } from "@/lib/amount-formatter";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { FormattedAmountDisplay } from "@/components/ui/formatted-amount";
 import { getNetworkConfig } from "@/config/networks";
+import { classifyAssetTrust, assetTrustLabel } from "@/services/api/asset-trust";
+import { ContractAddressComparison } from "./contract-address-comparison";
 import type { ErrorCode, ResourcePaymentSummary } from "@/services/api/schemas";
+import type { AssetTrustStatus } from "@/services/api/asset-trust";
 
 import { prettyJson } from "./schema-utils";
 
@@ -19,13 +22,34 @@ type PaymentRequirementViewerProps = {
     message: string;
   }>;
   requirement: ResourcePaymentSummary;
+  /** Optional callback when user confirms proceeding with an unknown asset */
+  onConfirmUnknownAsset?: () => void;
 };
 
 export function PaymentRequirementViewer({
   failureReasons = [],
-  requirement
+  requirement,
+  onConfirmUnknownAsset
 }: PaymentRequirementViewerProps) {
   const [copied, setCopied] = useState(false);
+  const [confirmUnknownAsset, setConfirmUnknownAsset] = useState(false);
+  const warningHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  // Classify the asset trust status
+  const assetContractId = requirement.extensions?.assetContractId as string | undefined;
+  const assetTrust: AssetTrustStatus | undefined = assetContractId
+    ? classifyAssetTrust(assetContractId, requirement.network)
+    : undefined;
+
+  const isUnknownAsset = assetTrust?.type === "unknown";
+  const isMalformedAsset = assetTrust?.type === "malformed";
+
+  // Focus warning heading when unknown asset warning appears
+  useEffect(() => {
+    if (isUnknownAsset && warningHeadingRef.current) {
+      warningHeadingRef.current.focus({ preventScroll: true });
+    }
+  }, [isUnknownAsset]);
 
   // Format the amount using network-specific asset metadata
   const networkConfig = getNetworkConfig(requirement.network);
@@ -38,6 +62,99 @@ export function PaymentRequirementViewer({
   async function copyPayload() {
     await navigator.clipboard.writeText(prettyJson(requirement));
     setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  const handleProceedWithUnknownAsset = () => {
+    if (confirmUnknownAsset) {
+      onConfirmUnknownAsset?.();
+    }
+  };
+
+  // If asset is unknown or malformed, show blocking warning
+  if ((isUnknownAsset || isMalformedAsset) && assetTrust) {
+    return (
+      <div className="space-y-4">
+        {/* Unknown Asset Warning Card */}
+        <Card>
+          <CardBody className="flex gap-3">
+            <AlertTriangle
+              aria-hidden="true"
+              className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-700"
+            />
+            <div className="flex-1">
+              <h3
+                ref={warningHeadingRef}
+                className="font-semibold text-amber-900"
+                tabIndex={-1}
+              >
+                {isMalformedAsset ? "Invalid Asset Contract" : "Unknown Asset"}
+              </h3>
+              <p className="mt-2 text-sm text-amber-800">
+                {isMalformedAsset
+                  ? "This payment asset has an invalid contract ID and cannot be processed."
+                  : "This payment asset is not in the trusted registry for " +
+                    requirement.network +
+                    ". Verify the contract address carefully before proceeding."}
+              </p>
+            </div>
+          </CardBody>
+        </Card>
+
+        {/* Contract Address Comparison */}
+        {assetContractId && (
+          <ContractAddressComparison
+            contractId={assetContractId}
+            registryEntry={
+              assetTrust.type === "trusted" ? assetTrust.registryEntry : undefined
+            }
+          />
+        )}
+
+        {/* Confirmation Checkbox (only for unknown, not malformed) */}
+        {isUnknownAsset && (
+          <>
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
+              <label className="flex items-start gap-3">
+                <input
+                  id="confirm-unknown-asset"
+                  type="checkbox"
+                  checked={confirmUnknownAsset}
+                  onChange={(e) => setConfirmUnknownAsset(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                  aria-describedby="confirm-unknown-asset-description"
+                />
+                <span className="flex-1 text-sm text-amber-900">
+                  <span className="font-medium">
+                    I understand this asset is not in the trusted registry
+                  </span>
+                  <span id="confirm-unknown-asset-description" className="block text-xs text-amber-700 mt-1">
+                    I have verified the contract address and proceed at my own risk.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            {/* Proceed Button */}
+            <Button
+              type="button"
+              disabled={!confirmUnknownAsset}
+              onClick={handleProceedWithUnknownAsset}
+              className="w-full sm:w-auto"
+            >
+              Proceed with Unknown Asset
+            </Button>
+          </>
+        )}
+
+        {/* Malformed Asset Message */}
+        {isMalformedAsset && (
+          <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+            Please correct the contract ID and try again.
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -55,6 +172,13 @@ export function PaymentRequirementViewer({
         </Button>
       </CardHeader>
       <CardBody className="space-y-5">
+        {/* Trust Status Badge (if trusted) */}
+        {assetTrust?.type === "trusted" && (
+          <div className="flex items-center gap-2">
+            <Badge tone="success">Trusted Asset</Badge>
+            <span className="text-xs text-slate-500">{assetTrustLabel(assetTrust)}</span>
+          </div>
+        )}
         <dl className="grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-4">
           <Field label="Network" value={requirement.network} />
           <div className="min-w-0">
@@ -71,6 +195,15 @@ export function PaymentRequirementViewer({
           <Field label="Recipient" value={requirement.payTo} wrap />
           <Field label="Resource" value={requirement.resourceId} wrap />
         </dl>
+
+        {/* Contract Address Comparison Section */}
+        {assetContractId && assetTrust?.type === "trusted" && (
+          <ContractAddressComparison
+            contractId={assetContractId}
+            registryEntry={assetTrust.registryEntry}
+            className="rounded-md border border-emerald-200 bg-emerald-50 p-4 space-y-3"
+          />
+        )}
 
         <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
@@ -126,3 +259,4 @@ function Field({ label, value, wrap = false }: { label: string; value: string; w
     </div>
   );
 }
+
