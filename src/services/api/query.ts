@@ -21,5 +21,13 @@ export const queryKeys = {
   resources: (filters: Record<string, unknown>) => ["resources", filters] as const,
   search: (filters: Record<string, unknown>) => ["search", filters] as const,
   sellers: ["sellers"] as const,
-  supported: ["supported"] as const
+  supported: ["supported"] as const,
+  // Cursor-paginated queries
+  transactions: (
+    filters: Record<string, unknown>,
+    cursor?: string,
+    direction?: "forward" | "backward"
+  ) => ["transactions", filters, cursor, direction] as const,
+  sellerPayments: (sellerId: string, cursor?: string, direction?: "forward" | "backward") =>
+    ["sellerPayments", sellerId, cursor, direction] as const
 };

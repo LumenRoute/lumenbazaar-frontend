@@ -38,6 +38,17 @@ export type PaymentActivityFilters = {
   status?: PaymentActivityStatus;
 };
 
+/**
+ * Paginated response for payment activity.
+ * Cursors are opaque tokens managed entirely by the backend.
+ * Clients must never construct, modify, or decode cursors.
+ */
+export type PaginatedPaymentActivityResponse = {
+  items: PaymentActivity[];
+  nextCursor?: string; // Undefined if on final page
+  previousCursor?: string; // Undefined if on first page
+};
+
 export type SellerResourceFilters = {
   asset?: string;
   network?: NetworkId;
