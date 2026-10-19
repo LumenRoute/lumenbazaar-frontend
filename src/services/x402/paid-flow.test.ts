@@ -137,6 +137,90 @@ describe("paid resource flow", () => {
     expect(storage.value()).toBe("");
   });
 
+  it("binds recovery metadata to the initiating public account without signed material", async () => {
+    const storage = memoryStorage();
+    await createPaidFlowCoordinator().execute({
+      authorization: authorization(),
+      challenge: challenge(),
+      client: successfulClient({ getReceipt: vi.fn(async () => receipt({ status: "pending" })) }),
+      fetchImpl: vi.fn(async () => Response.json({ ok: true })) as unknown as typeof fetch,
+      receiptPolling: fastPolling,
+      resourceAssetCode: "USDC",
+      resourceId: "resource_weather",
+      storage
+    });
+
+    expect(storage.value()).toContain('"account":"GPAYER"');
+    expect(storage.value()).not.toMatch(/canonical-header|signed-xdr|PAYMENT-SIGNATURE/i);
+  });
+
+  it("keeps read-only receipt recovery after an account change following submission", async () => {
+    const storage = memoryStorage();
+    await createPaidFlowCoordinator().execute({
+      authorization: authorization(),
+      challenge: challenge(),
+      client: successfulClient({ getReceipt: vi.fn(async () => receipt({ status: "pending" })) }),
+      fetchImpl: vi.fn(async () => Response.json({ ok: true })) as unknown as typeof fetch,
+      receiptPolling: fastPolling,
+      resourceAssetCode: "USDC",
+      resourceId: "resource_weather",
+      storage
+    });
+
+    const refreshedClient = { getReceipt: vi.fn(async () => receipt({ status: "pending" })) };
+    const recovered = await createPaidFlowCoordinator().recover({
+      account: "GOTHERACCOUNT",
+      client: refreshedClient,
+      receiptPolling: fastPolling,
+      resourceId: "resource_weather",
+      storage
+    });
+
+    expect(recovered).toMatchObject({
+      accountBinding: {
+        activeAccount: "GOTHERACCOUNT",
+        initiatingAccount: "GPAYER",
+        status: "changed"
+      },
+      state: "pending"
+    });
+    expect(refreshedClient.getReceipt).toHaveBeenCalledWith("receipt_1");
+  });
+
+  it("preserves confirmed receipt evidence after an account change and restores eligibility on return", async () => {
+    const storage = memoryStorage();
+    await createPaidFlowCoordinator().execute({
+      authorization: authorization(),
+      challenge: challenge(),
+      client: successfulClient(),
+      fetchImpl: vi.fn(async () => Response.json({ ok: true })) as unknown as typeof fetch,
+      receiptPolling: fastPolling,
+      resourceAssetCode: "USDC",
+      resourceId: "resource_weather",
+      storage
+    });
+
+    const changed = await createPaidFlowCoordinator().recover({
+      account: "GOTHERACCOUNT",
+      client: { getReceipt: vi.fn(async () => receipt()) },
+      resourceId: "resource_weather",
+      storage
+    });
+    expect(changed).toMatchObject({
+      accountBinding: { initiatingAccount: "GPAYER", status: "changed" },
+      receipt: { id: "receipt_1", status: "finalized" },
+      state: "confirmed"
+    });
+
+    const returned = await createPaidFlowCoordinator().recover({
+      account: "GPAYER",
+      client: { getReceipt: vi.fn(async () => receipt()) },
+      resourceId: "resource_weather",
+      storage
+    });
+    expect(returned?.accountBinding?.status).toBe("matches");
+  });
+
   it("recovers a submitted receipt after a browser refresh without a signed payload", async () => {
     const storage = memoryStorage();
     await createPaidFlowCoordinator().execute({

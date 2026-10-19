@@ -39,7 +39,15 @@ export type PaidResourceResponse = {
   status: number;
 };
 
+export type PaymentAccountBinding = {
+  activeAccount?: string;
+  initiatingAccount: string;
+  status: "matches" | "changed" | "unverified";
+};
+
 export type PaidFlowOutcome = {
+  /** Present when recovery metadata is bound to an initiating public account. */
+  accountBinding?: PaymentAccountBinding;
   message: string;
   paidResponse?: PaidResourceResponse;
   receipt?: Receipt;
@@ -98,6 +106,8 @@ type ExecutePaidFlowInput = {
 };
 
 type RecoverPaidFlowInput = {
+  /** Currently active public account, used only to classify action eligibility. */
+  account?: string;
   client?: Pick<LumenBazaarApiClient, "getReceipt">;
   receiptPolling?: ReceiptPollingOptions;
   resourceId: string;
@@ -107,6 +117,7 @@ type RecoverPaidFlowInput = {
 };
 
 const recoverySchema = z.object({
+  account: z.string().min(1),
   amount: z.string().regex(/^[1-9]\d*$/),
   assetCode: z.string().min(1),
   assetIssuer: z.string().min(1),
@@ -130,7 +141,7 @@ const recoverySchema = z.object({
    *
    * Only includes safe identifiers for recovery:
    * - IDs: paymentAttemptId, correlationId, receiptId, resourceId
-   * - Public data: amount, asset, network, recipient (payTo), transactionHash
+   * - Public data: account, amount, asset, network, recipient (payTo), transactionHash
    * - Metadata: stage, updatedAt
    *
    * Recovery metadata is stored in sessionStorage (cleared on browser close)
@@ -212,6 +223,7 @@ async function executePaidFlow(input: ExecutePaidFlowInput): Promise<PaidFlowOut
   }
 
   const recovery: RecoveryRecord = {
+    account: input.authorization.account,
     amount: input.challenge.requirement.amount,
     assetCode: input.resourceAssetCode ?? "UNKNOWN",
     assetIssuer: input.resourceAssetIssuer ?? input.challenge.requirement.asset,
@@ -434,8 +446,10 @@ async function recoverPaidFlow(input: RecoverPaidFlowInput): Promise<PaidFlowOut
   const storage = input.storage === undefined ? browserSessionStorage() : input.storage;
   const recovery = loadRecovery(storage, input.resourceId);
   if (recovery === undefined) return undefined;
+  const accountBinding = resolvePaymentAccountBinding(recovery.account, input.account);
   if (recovery.receiptId === undefined) {
     return {
+      accountBinding,
       message:
         "A verified payment attempt is unresolved. Do not authorize another payment until its outcome is reconciled.",
       state: "indeterminate"
@@ -451,18 +465,40 @@ async function recoverPaidFlow(input: RecoverPaidFlowInput): Promise<PaidFlowOut
   });
   if (finality.receipt !== undefined) {
     return {
+      accountBinding,
       ...outcomeFromReceipt(finality.receipt, recovery),
       receiptLookupAttempts: finality.attempts
     };
   }
 
   return {
+    accountBinding,
     message: finality.offline
       ? "A submitted payment is awaiting a recoverable receipt; lookups resume when the browser is back online."
       : "A submitted payment is awaiting a recoverable receipt.",
     receiptLookupAttempts: finality.attempts,
     state: "pending",
     transactionHash: recovery.transactionHash
+  };
+}
+
+/**
+ * Binds a recovered payment attempt to the public account that authorized it.
+ * A different active account keeps receipt recovery read-only; switching back
+ * to the initiating account restores eligibility.
+ */
+export function resolvePaymentAccountBinding(
+  initiatingAccount: string,
+  activeAccount?: string
+): PaymentAccountBinding {
+  if (activeAccount === undefined) {
+    return { initiatingAccount, status: "unverified" };
+  }
+
+  return {
+    activeAccount,
+    initiatingAccount,
+    status: activeAccount === initiatingAccount ? "matches" : "changed"
   };
 }
 

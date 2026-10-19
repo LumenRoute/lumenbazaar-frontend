@@ -9,6 +9,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { loadRuntimeConfig } from "@/config/runtime";
 import { apiClient } from "@/services/api/client";
 import type { Resource } from "@/services/api/schemas";
+import { readActiveWalletAccount } from "@/services/wallets";
 import {
   AuthorizationError,
   authorizePaymentChallenge,
@@ -65,8 +66,14 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
     if (source !== "api") return;
     const controller = new AbortController();
     activeRequest.current = controller;
-    void paidFlowCoordinator
-      .recover({ resourceId: resource.id, signal: controller.signal })
+    void readActiveWalletAccount()
+      .then((account) =>
+        paidFlowCoordinator.recover({
+          account,
+          resourceId: resource.id,
+          signal: controller.signal
+        })
+      )
       .then((recovered) => {
         if (recovered === undefined || controller.signal.aborted) return;
         setOutcome(recovered);
@@ -118,7 +125,7 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
   }
 
   async function authorize() {
-    if (challenge === undefined) return;
+    if (challenge === undefined || paymentLocked) return;
     // Prevent expired challenges from reaching wallet signing.
     if (isChallengeExpired(challenge)) {
       setError(
@@ -176,6 +183,7 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
     activeRequest.current = controller;
     try {
       const recovered = await paidFlowCoordinator.recover({
+        account: await readActiveWalletAccount(),
         resourceId: resource.id,
         signal: controller.signal
       });
@@ -282,6 +290,9 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone="success">Payment authorization ready</Badge>
                   <span className="break-all text-xs text-slate-500">{authorization.account}</span>
+                  {outcome?.accountBinding?.status === "changed" ? (
+                    <Badge tone="warning">Initiating account inactive</Badge>
+                  ) : null}
                 </div>
               )}
               {authorization === undefined ? (
@@ -309,6 +320,19 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
         {flowState !== undefined ? (
           <div aria-live="polite" className="mt-4 border-t border-slate-200 pt-4">
             <Badge tone={flowTone(flowState)}>{paidFlowStateLabels[flowState]}</Badge>
+          </div>
+        ) : null}
+        {outcome?.accountBinding?.status === "changed" ? (
+          <div
+            className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"
+            role="alert"
+          >
+            This pending payment was authorized by{" "}
+            <span className="break-all font-medium">
+              {outcome.accountBinding.initiatingAccount}
+            </span>
+            . New payment actions are blocked while a different account is active; receipt recovery
+            stays read-only until you switch back to the initiating account.
           </div>
         ) : null}
         {outcome?.state === "pending" ? (
