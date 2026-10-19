@@ -21,6 +21,7 @@ import { DataFreshnessBadge } from "@/components/ui/data-freshness-badge";
 import { ErrorState, LoadingState } from "@/components/ui/surfaces";
 import { loadRuntimeConfig } from "@/config/runtime";
 import { queryKeys } from "@/services/api/query";
+import { docsOrigin, docsRoutes } from "@/services/docs-links";
 import { loadOperatorSnapshot, statusTone } from "@/services/operators";
 import { normalizeUiError } from "@/services/ui-state";
 
@@ -240,10 +241,7 @@ export function OperatorDashboard() {
                 href="https://github.com/LumenRoute/lumenbazaar-contracts"
                 label="Contracts"
               />
-              <EvidenceLink
-                href="https://github.com/LumenRoute/lumenbazaar-docs"
-                label="Documentation"
-              />
+              <EvidenceLink href={`${docsOrigin}${docsRoutes.operator}`} label="Documentation" />
               {snapshot.version?.commit !== undefined ? (
                 <EvidenceLink
                   href={`https://github.com/LumenRoute/lumenbazaar-backend/commit/${snapshot.version.commit}`}

@@ -29,6 +29,8 @@ jobs:
       - run: pnpm audit:prod
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm check
+      - name: Verify deployed documentation links
+        run: pnpm check:docs-links
       - run: pnpm test:e2e
       - name: Run accessibility tests (desktop + mobile)
         run: pnpm test:e2e:a11y
