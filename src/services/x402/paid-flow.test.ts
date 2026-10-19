@@ -5,7 +5,14 @@ import type { PaymentVerification, Receipt, Settlement } from "@/services/api/sc
 
 import type { SignedPaymentAuthorization } from "./authorization";
 import type { ValidatedPaymentChallenge } from "./challenge";
-import { createPaidFlowCoordinator, paidFlowStateLabels } from "./paid-flow";
+import { awaitReceiptFinality, createPaidFlowCoordinator, paidFlowStateLabels } from "./paid-flow";
+
+const fastPolling = {
+  initialDelayMs: 1,
+  maxDelayMs: 1,
+  maxAttempts: 2,
+  maxElapsedMs: 50
+};
 
 describe("paid resource flow", () => {
   it("verifies, retries the original request once, settles, and confirms a durable receipt", async () => {
@@ -23,6 +30,7 @@ describe("paid resource flow", () => {
       client,
       fetchImpl: fetchImpl as typeof fetch,
       onState: (state) => states.push(state),
+      resourceAssetCode: "USDC",
       resourceId: "resource_weather",
       storage
     });
@@ -54,6 +62,7 @@ describe("paid resource flow", () => {
       challenge: challenge(),
       client,
       fetchImpl: vi.fn(async () => Response.json({ ok: true })) as unknown as typeof fetch,
+      resourceAssetCode: "USDC",
       resourceId: "resource_weather",
       storage: memoryStorage()
     };
@@ -78,6 +87,7 @@ describe("paid resource flow", () => {
       challenge: challenge(),
       client,
       fetchImpl: fetchImpl as typeof fetch,
+      resourceAssetCode: "USDC",
       resourceId: "resource_weather",
       storage: memoryStorage(),
       timeoutMs: 1
@@ -115,6 +125,7 @@ describe("paid resource flow", () => {
       challenge: challenge(),
       client,
       fetchImpl: vi.fn(async () => Response.json({ ok: true })) as unknown as typeof fetch,
+      resourceAssetCode: "USDC",
       resourceId: "resource_weather",
       storage
     });
@@ -133,6 +144,8 @@ describe("paid resource flow", () => {
       challenge: challenge(),
       client: successfulClient({ getReceipt: vi.fn(async () => receipt({ status: "pending" })) }),
       fetchImpl: vi.fn(async () => Response.json({ ok: true })) as unknown as typeof fetch,
+      receiptPolling: fastPolling,
+      resourceAssetCode: "USDC",
       resourceId: "resource_weather",
       storage
     });
@@ -159,6 +172,7 @@ describe("paid resource flow", () => {
       fetchImpl: vi.fn(async () => {
         throw new Error("network timeout");
       }) as unknown as typeof fetch,
+      resourceAssetCode: "USDC",
       resourceId: "resource_weather",
       storage
     });
@@ -181,9 +195,7 @@ describe("paid resource flow", () => {
 
     expect(result).toMatchObject({
       state: "indeterminate",
-      validationErrors: expect.arrayContaining([
-        expect.stringContaining("Amount mismatch")
-      ])
+      validationErrors: expect.arrayContaining([expect.stringContaining("Amount mismatch")])
     });
   });
 
@@ -195,9 +207,7 @@ describe("paid resource flow", () => {
 
     expect(result).toMatchObject({
       state: "indeterminate",
-      validationErrors: expect.arrayContaining([
-        expect.stringContaining("Asset code mismatch")
-      ])
+      validationErrors: expect.arrayContaining([expect.stringContaining("Asset code mismatch")])
     });
   });
 
@@ -209,9 +219,7 @@ describe("paid resource flow", () => {
 
     expect(result).toMatchObject({
       state: "indeterminate",
-      validationErrors: expect.arrayContaining([
-        expect.stringContaining("Asset issuer mismatch")
-      ])
+      validationErrors: expect.arrayContaining([expect.stringContaining("Asset issuer mismatch")])
     });
   });
 
@@ -223,9 +231,7 @@ describe("paid resource flow", () => {
 
     expect(result).toMatchObject({
       state: "indeterminate",
-      validationErrors: expect.arrayContaining([
-        expect.stringContaining("Network mismatch")
-      ])
+      validationErrors: expect.arrayContaining([expect.stringContaining("Network mismatch")])
     });
   });
 
@@ -237,9 +243,7 @@ describe("paid resource flow", () => {
 
     expect(result).toMatchObject({
       state: "indeterminate",
-      validationErrors: expect.arrayContaining([
-        expect.stringContaining("Resource ID mismatch")
-      ])
+      validationErrors: expect.arrayContaining([expect.stringContaining("Resource ID mismatch")])
     });
   });
 
@@ -265,9 +269,7 @@ describe("paid resource flow", () => {
 
     expect(result).toMatchObject({
       state: "indeterminate",
-      validationErrors: expect.arrayContaining([
-        expect.stringContaining("Correlation ID mismatch")
-      ])
+      validationErrors: expect.arrayContaining([expect.stringContaining("Correlation ID mismatch")])
     });
   });
 
@@ -283,6 +285,7 @@ describe("paid resource flow", () => {
       challenge: challenge(),
       client,
       fetchImpl: vi.fn(async () => Response.json({ ok: true })) as unknown as typeof fetch,
+      resourceAssetCode: "USDC",
       resourceId: "resource_weather",
       storage
     });
@@ -298,6 +301,170 @@ describe("paid resource flow", () => {
   it("keeps all user-facing lifecycle labels distinct", () => {
     expect(new Set(Object.values(paidFlowStateLabels)).size).toBe(8);
   });
+
+  describe("bounded receipt finality polling", () => {
+    it("repeats only the receipt lookup until finality and never resettles", async () => {
+      const receipts = [
+        receipt({ status: "pending" }),
+        receipt({ status: "pending" }),
+        receipt({ status: "finalized" })
+      ];
+      const client = successfulClient({
+        getReceipt: vi.fn(async () => receipts.shift() ?? receipt())
+      });
+
+      const result = await createPaidFlowCoordinator().execute({
+        authorization: authorization(),
+        challenge: challenge(),
+        client,
+        fetchImpl: vi.fn(async () => Response.json({ ok: true })) as unknown as typeof fetch,
+        receiptPolling: { ...fastPolling, maxAttempts: 3 },
+        resourceAssetCode: "USDC",
+        resourceId: "resource_weather",
+        storage: memoryStorage()
+      });
+
+      expect(result).toMatchObject({
+        receiptLookupAttempts: 3,
+        state: "confirmed"
+      });
+      expect(client.getReceipt).toHaveBeenCalledTimes(3);
+      expect(client.verifyPayment).toHaveBeenCalledTimes(1);
+      expect(client.settlePayment).toHaveBeenCalledTimes(1);
+    });
+
+    it("stops at the configured limit and reports pending without a terminal receipt", async () => {
+      const client = successfulClient({
+        getReceipt: vi.fn(async () => receipt({ status: "pending" }))
+      });
+
+      const result = await execute(client);
+
+      expect(result).toMatchObject({ receiptLookupAttempts: 2, state: "pending" });
+      expect(client.getReceipt).toHaveBeenCalledTimes(2);
+      expect(client.settlePayment).toHaveBeenCalledTimes(1);
+    });
+
+    it("treats a failed receipt as terminal", async () => {
+      const client = successfulClient({
+        getReceipt: vi.fn(async () =>
+          receipt({
+            failureCode: "LEDGER_FAILED",
+            failureReason: "Ledger failed.",
+            status: "failed"
+          })
+        )
+      });
+
+      const result = await execute(client);
+
+      expect(result).toMatchObject({ receiptLookupAttempts: 1, state: "rejected" });
+      expect(client.getReceipt).toHaveBeenCalledTimes(1);
+    });
+
+    it("pauses receipt lookups while the tab is hidden or the browser is offline", async () => {
+      let blocked = true;
+      const listeners = new Set<() => void>();
+      const client = { getReceipt: vi.fn(async () => receipt()) };
+      const pending = awaitReceiptFinality({
+        client,
+        polling: {
+          initialDelayMs: 1,
+          maxAttempts: 2,
+          visibility: {
+            isHidden: () => blocked,
+            subscribe: (listener) => {
+              listeners.add(listener);
+              return () => listeners.delete(listener);
+            }
+          }
+        },
+        receiptId: "receipt_1"
+      });
+
+      expect(client.getReceipt).not.toHaveBeenCalled();
+      blocked = false;
+      for (const listener of listeners) listener();
+
+      await expect(pending).resolves.toMatchObject({ status: "terminal" });
+      expect(client.getReceipt).toHaveBeenCalledTimes(1);
+    });
+
+    it("cancels in-flight lookups when the consumer unmounts", async () => {
+      const controller = new AbortController();
+      const client = {
+        getReceipt: vi.fn(async () => {
+          controller.abort();
+          return receipt({ status: "pending" });
+        })
+      };
+
+      const result = await awaitReceiptFinality({
+        client,
+        polling: { initialDelayMs: 1, maxAttempts: 5, maxElapsedMs: 500 },
+        receiptId: "receipt_1",
+        signal: controller.signal
+      });
+
+      expect(result).toMatchObject({ attempts: 1, status: "cancelled" });
+      expect(client.getReceipt).toHaveBeenCalledTimes(1);
+    });
+
+    it("recovers after offline mode without resubmitting settlement", async () => {
+      const storage = memoryStorage();
+      const client = successfulClient({
+        getReceipt: vi.fn(async () => receipt({ status: "pending" }))
+      });
+      await createPaidFlowCoordinator().execute({
+        authorization: authorization(),
+        challenge: challenge(),
+        client,
+        fetchImpl: vi.fn(async () => Response.json({ ok: true })) as unknown as typeof fetch,
+        receiptPolling: fastPolling,
+        resourceAssetCode: "USDC",
+        resourceId: "resource_weather",
+        storage
+      });
+
+      const recoveredClient = {
+        getReceipt: vi.fn(async () => receipt())
+      };
+      const recovered = await createPaidFlowCoordinator().recover({
+        client: recoveredClient,
+        receiptPolling: fastPolling,
+        resourceId: "resource_weather",
+        storage
+      });
+
+      expect(recovered).toMatchObject({ state: "confirmed" });
+      expect(recoveredClient.getReceipt).toHaveBeenCalledWith("receipt_1");
+      expect(client.settlePayment).toHaveBeenCalledTimes(1);
+    });
+
+    it("coalesces duplicate consumers so a single poll loop runs", async () => {
+      const coordinator = createPaidFlowCoordinator();
+      const client = successfulClient({
+        getReceipt: vi.fn(async () => receipt({ status: "pending" }))
+      });
+      const input = {
+        authorization: authorization(),
+        challenge: challenge(),
+        client,
+        fetchImpl: vi.fn(async () => Response.json({ ok: true })) as unknown as typeof fetch,
+        receiptPolling: fastPolling,
+        resourceAssetCode: "USDC",
+        resourceId: "resource_weather",
+        storage: memoryStorage()
+      };
+
+      const first = coordinator.execute(input);
+      const second = coordinator.execute(input);
+
+      expect(first).toBe(second);
+      await expect(first).resolves.toMatchObject({ state: "pending" });
+      expect(client.getReceipt).toHaveBeenCalledTimes(2);
+    });
+  });
 });
 
 function execute(client = successfulClient()) {
@@ -306,6 +473,8 @@ function execute(client = successfulClient()) {
     challenge: challenge(),
     client,
     fetchImpl: vi.fn(async () => Response.json({ ok: true })) as unknown as typeof fetch,
+    receiptPolling: fastPolling,
+    resourceAssetCode: "USDC",
     resourceId: "resource_weather",
     storage: memoryStorage()
   });
@@ -360,7 +529,7 @@ function receipt(overrides: Partial<Receipt> = {}): Receipt {
   return {
     amount: "500000",
     assetCode: "USDC",
-    assetIssuer: "GISSUER",
+    assetIssuer: "CA7QYNF7SOWQ4VJNMGEVXZHYQACUIM2MRRPFNQ4SLRJRYE67Z2BJQXMR",
     correlationId: "corr_1",
     createdAt: "2026-10-07T10:00:00.000Z",
     evidenceHash: "evidence_1",
@@ -398,11 +567,11 @@ function authorization(): SignedPaymentAuthorization {
 function challenge(): ValidatedPaymentChallenge {
   const requirement = {
     amount: "500000",
-    asset: "CASSET",
+    asset: "CA7QYNF7SOWQ4VJNMGEVXZHYQACUIM2MRRPFNQ4SLRJRYE67Z2BJQXMR",
     extra: { areFeesSponsored: true },
     maxTimeoutSeconds: 60,
     network: "stellar:testnet" as const,
-    payTo: "GRECIPIENT",
+    payTo: "GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE",
     scheme: "exact" as const
   };
   return {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { ApiClientError, apiClient, type LumenBazaarApiClient } from "@/services/api/client";
+import { browserVisibility, pollWithBackoff, type PollVisibility } from "@/services/polling";
 import {
   paymentPayloadSchema,
   type PaymentVerification,
@@ -42,11 +43,39 @@ export type PaidFlowOutcome = {
   message: string;
   paidResponse?: PaidResourceResponse;
   receipt?: Receipt;
+  /** Receipt lookups performed while waiting for durable finality. */
+  receiptLookupAttempts?: number;
   settlement?: Settlement;
   state: "confirmed" | "indeterminate" | "pending" | "rejected";
   transactionHash?: string;
   validationErrors?: string[];
 };
+
+/**
+ * Bounded receipt-lookup schedule. Only the receipt read is repeated; payment
+ * verification, the paid resource call, and settlement each run at most once.
+ */
+export type ReceiptPollingOptions = {
+  initialDelayMs?: number;
+  maxAttempts?: number;
+  maxDelayMs?: number;
+  maxElapsedMs?: number;
+  now?: () => number;
+  sleep?: (delayMs: number, signal: AbortSignal) => Promise<boolean>;
+  /** Injectable traffic gate; hidden tabs and offline browsers pause lookups. */
+  visibility?: PollVisibility;
+};
+
+export type ReceiptFinality =
+  | { attempts: number; offline: boolean; receipt: Receipt; status: "terminal" }
+  | {
+      attempts: number;
+      lastError?: unknown;
+      offline: boolean;
+      receipt?: Receipt;
+      status: "exhausted";
+    }
+  | { attempts: number; receipt?: Receipt; status: "cancelled"; offline: boolean };
 
 type PaidFlowClient = Pick<LumenBazaarApiClient, "getReceipt" | "settlePayment" | "verifyPayment">;
 
@@ -58,16 +87,21 @@ type ExecutePaidFlowInput = {
   client?: PaidFlowClient;
   fetchImpl?: typeof fetch;
   onState?: (state: PaidFlowState) => void;
+  receiptPolling?: ReceiptPollingOptions;
   resourceAssetCode?: string;
   resourceAssetIssuer?: string;
   resourceId: string;
+  /** Aborts pending receipt lookups, for example when the view unmounts. */
+  signal?: AbortSignal;
   storage?: StorageLike | null;
   timeoutMs?: number;
 };
 
 type RecoverPaidFlowInput = {
   client?: Pick<LumenBazaarApiClient, "getReceipt">;
+  receiptPolling?: ReceiptPollingOptions;
   resourceId: string;
+  signal?: AbortSignal;
   storage?: StorageLike | null;
   timeoutMs?: number;
 };
@@ -87,18 +121,18 @@ const recoverySchema = z.object({
   updatedAt: z.string().datetime()
   /**
    * SECURITY NOTE: RecoveryRecord whitelist
-   * 
+   *
    * This schema intentionally EXCLUDES sensitive fields:
    * - NO: paymentSignatureHeader (PAYMENT-SIGNATURE)
    * - NO: signedAuthEntry or signedXdr
    * - NO: paymentPayload (signed transaction envelope)
    * - NO: walletAddress or private key material
-   * 
+   *
    * Only includes safe identifiers for recovery:
    * - IDs: paymentAttemptId, correlationId, receiptId, resourceId
    * - Public data: amount, asset, network, recipient (payTo), transactionHash
    * - Metadata: stage, updatedAt
-   * 
+   *
    * Recovery metadata is stored in sessionStorage (cleared on browser close)
    * and never persists beyond the current session.
    */
@@ -265,20 +299,135 @@ async function executePaidFlow(input: ExecutePaidFlowInput): Promise<PaidFlowOut
   saveRecovery(storage, submittedRecovery);
   input.onState?.("pending");
 
-  let receipt: Receipt;
-  try {
-    receipt = await withTimeout(client.getReceipt(settlementEvidence.receiptId), timeoutMs);
-  } catch {
+  const finality = await awaitReceiptFinality({
+    client,
+    polling: input.receiptPolling,
+    receiptId: settlementEvidence.receiptId,
+    signal: input.signal,
+    timeoutMs
+  });
+
+  if (finality.receipt === undefined) {
     return {
-      message: "Settlement was submitted; receipt finality is not available yet.",
+      message: finality.offline
+        ? "Settlement was submitted; receipt lookups are paused while the browser is offline."
+        : "Settlement was submitted; receipt finality is not available yet.",
       paidResponse,
+      receiptLookupAttempts: finality.attempts,
       settlement,
       state: "pending",
       transactionHash: settlement.transaction
     };
   }
 
-  return outcomeFromReceipt(receipt, submittedRecovery, paidResponse, settlement, input.onState);
+  return {
+    ...outcomeFromReceipt(
+      finality.receipt,
+      submittedRecovery,
+      paidResponse,
+      settlement,
+      input.onState
+    ),
+    receiptLookupAttempts: finality.attempts
+  };
+}
+
+type ReceiptLookupClient = Pick<LumenBazaarApiClient, "getReceipt">;
+
+/**
+ * Repeats only `getReceipt` with cancellable exponential backoff until the
+ * receipt reaches a terminal state, the configured budget is exhausted, or the
+ * caller aborts. Hidden tabs and offline browsers pause lookups instead of
+ * issuing duplicate status traffic.
+ */
+export async function awaitReceiptFinality({
+  client,
+  polling = {},
+  receiptId,
+  signal,
+  timeoutMs = 30_000
+}: {
+  client: ReceiptLookupClient;
+  polling?: ReceiptPollingOptions;
+  receiptId: string;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}): Promise<ReceiptFinality> {
+  let lastReceipt: Receipt | undefined;
+  let lastError: unknown;
+  const result = await pollWithBackoff<Receipt | null>({
+    check: async () => {
+      try {
+        const receipt = await withTimeout(client.getReceipt(receiptId), timeoutMs);
+        lastReceipt = receipt;
+        lastError = undefined;
+        return receipt;
+      } catch (error) {
+        lastError = error;
+        return null;
+      }
+    },
+    initialDelayMs: polling.initialDelayMs,
+    isTerminal: (receipt) =>
+      receipt !== null && (receipt.status === "finalized" || receipt.status === "failed"),
+    maxAttempts: polling.maxAttempts,
+    maxDelayMs: polling.maxDelayMs,
+    maxElapsedMs: polling.maxElapsedMs,
+    now: polling.now,
+    signal,
+    sleep: polling.sleep,
+    visibility: polling.visibility ?? browserReceiptGate()
+  });
+
+  if (result.status === "terminal" && result.value !== null) {
+    return {
+      attempts: result.attempts,
+      offline: browserIsOffline(),
+      receipt: result.value,
+      status: "terminal"
+    };
+  }
+
+  if (result.status === "cancelled") {
+    return {
+      attempts: result.attempts,
+      offline: browserIsOffline(),
+      ...(lastReceipt === undefined ? {} : { receipt: lastReceipt }),
+      status: "cancelled"
+    };
+  }
+
+  return {
+    attempts: result.attempts,
+    offline: browserIsOffline(),
+    ...(lastError === undefined ? {} : { lastError }),
+    ...(lastReceipt === undefined ? {} : { receipt: lastReceipt }),
+    status: "exhausted"
+  };
+}
+
+function browserIsOffline() {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+function browserReceiptGate(): PollVisibility | undefined {
+  const visibility = browserVisibility();
+  if (typeof window === "undefined") return undefined;
+
+  return {
+    isHidden: () => visibility?.isHidden() === true || browserIsOffline(),
+    subscribe: (listener) => {
+      const unsubscribeVisibility = visibility?.subscribe(listener) ?? (() => undefined);
+      window.addEventListener("online", listener);
+      window.addEventListener("offline", listener);
+
+      return () => {
+        unsubscribeVisibility();
+        window.removeEventListener("online", listener);
+        window.removeEventListener("offline", listener);
+      };
+    }
+  };
 }
 
 async function recoverPaidFlow(input: RecoverPaidFlowInput): Promise<PaidFlowOutcome | undefined> {
@@ -293,19 +442,28 @@ async function recoverPaidFlow(input: RecoverPaidFlowInput): Promise<PaidFlowOut
     };
   }
 
-  try {
-    const receipt = await withTimeout(
-      (input.client ?? apiClient).getReceipt(recovery.receiptId),
-      input.timeoutMs ?? 30_000
-    );
-    return outcomeFromReceipt(receipt, recovery);
-  } catch {
+  const finality = await awaitReceiptFinality({
+    client: input.client ?? apiClient,
+    polling: input.receiptPolling,
+    receiptId: recovery.receiptId,
+    signal: input.signal,
+    ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs })
+  });
+  if (finality.receipt !== undefined) {
     return {
-      message: "A submitted payment is awaiting a recoverable receipt.",
-      state: "pending",
-      transactionHash: recovery.transactionHash
+      ...outcomeFromReceipt(finality.receipt, recovery),
+      receiptLookupAttempts: finality.attempts
     };
   }
+
+  return {
+    message: finality.offline
+      ? "A submitted payment is awaiting a recoverable receipt; lookups resume when the browser is back online."
+      : "A submitted payment is awaiting a recoverable receipt.",
+    receiptLookupAttempts: finality.attempts,
+    state: "pending",
+    transactionHash: recovery.transactionHash
+  };
 }
 
 async function callPaidResource(
@@ -381,7 +539,9 @@ function validateReceiptEvidence(receipt: Receipt, recovery: RecoveryRecord): st
     errors.push(`Asset code mismatch: expected ${recovery.assetCode}, got ${receipt.assetCode}`);
   }
   if (receipt.assetIssuer !== recovery.assetIssuer) {
-    errors.push(`Asset issuer mismatch: expected ${recovery.assetIssuer}, got ${receipt.assetIssuer}`);
+    errors.push(
+      `Asset issuer mismatch: expected ${recovery.assetIssuer}, got ${receipt.assetIssuer}`
+    );
   }
 
   // Validate recipient (payTo)

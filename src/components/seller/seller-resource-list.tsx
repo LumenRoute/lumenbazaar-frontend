@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ban, Eye, Pencil, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -15,6 +15,11 @@ import { isDemoMode, loadRuntimeConfig } from "@/config/runtime";
 import type { Resource, ResourceStatus } from "@/services/api/schemas";
 import { queryKeys } from "@/services/api/query";
 import { formatPaymentAmount, loadSellerResourceSnapshot, shortHash } from "@/services/payments";
+import {
+  ResourceLifecycleError,
+  resourceLifecycleCoordinator,
+  type ResourceLifecycleAction
+} from "@/services/resource-lifecycle";
 import { emptyStateForCollection, normalizeUiError } from "@/services/ui-state";
 
 import { useSellerSession } from "./seller-session-provider";
@@ -26,32 +31,107 @@ const statusOptions: Array<{ label: string; value: ResourceStatus | "all" }> = [
   { label: "Inactive", value: "inactive" }
 ];
 
+type LifecycleDialog = {
+  action: ResourceLifecycleAction;
+  resource: Resource;
+};
+
 export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sellerId?: string }) {
   const mode = loadRuntimeConfig().environment;
   const demo = isDemoMode(mode);
   const { canMutate } = useSellerSession();
   const [status, setStatus] = useState<ResourceStatus | "all">("all");
-  const [disabledIds, setDisabledIds] = useState<Set<string>>(new Set());
+  const [dialog, setDialog] = useState<LifecycleDialog | null>(null);
+  const [reason, setReason] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [error, setError] = useState<{ code: string; message: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [ineligibleIds, setIneligibleIds] = useState<Set<string>>(new Set());
   const emptyState = emptyStateForCollection("resources");
-  const { data, error, isLoading, refetch } = useQuery({
+  const filters = { mode, sellerId, status };
+  const {
+    data,
+    error: queryError,
+    isLoading,
+    refetch
+  } = useQuery({
     queryFn: () =>
       loadSellerResourceSnapshot(
         { sellerId, ...(status === "all" ? {} : { status }) },
         undefined,
         mode
       ),
-    queryKey: queryKeys.resources({ mode, sellerId, status })
+    queryKey: queryKeys.resources(filters)
   });
-  const resources = (data?.resources ?? []).map((resource) =>
-    disabledIds.has(resource.id)
-      ? {
-          ...resource,
-          status: "inactive" as const
-        }
-      : resource
-  );
+  const resources = data?.resources ?? [];
 
   if (isLoading) return <LoadingState label="Loading seller resources" />;
+
+  function openDialog(action: ResourceLifecycleAction, resource: Resource) {
+    setDialog({ action, resource });
+    setReason("");
+    setConfirmed(false);
+    setError(null);
+    setNotice(null);
+  }
+
+  function closeDialog() {
+    if (pendingId !== null) return;
+    setDialog(null);
+    setError(null);
+  }
+
+  async function submitMutation() {
+    if (dialog === null) return;
+    setPendingId(dialog.resource.id);
+    setError(null);
+    try {
+      const input = {
+        confirmation: confirmed,
+        mode,
+        reason,
+        resource: dialog.resource
+      };
+      const outcome =
+        dialog.action === "disable"
+          ? await resourceLifecycleCoordinator.disable(input)
+          : await resourceLifecycleCoordinator.restore(input);
+
+      // Only mutate the visible list after the accepted result is applied by a
+      // refetch; no optimistic status change is shown.
+      setDialog(null);
+      setNotice(
+        `${outcome.resource.name} was ${
+          outcome.action === "disable" ? "removed from discovery" : "restored to discovery"
+        }.`
+      );
+      await queryClient.invalidateQueries({ queryKey: queryKeys.resources(filters) });
+      await refetch();
+    } catch (caught) {
+      const lifecycleError =
+        caught instanceof ResourceLifecycleError
+          ? caught
+          : new ResourceLifecycleError({
+              code: "BACKEND_UNAVAILABLE",
+              message: caught instanceof Error ? caught.message : "The change was not confirmed."
+            });
+
+      setError({ code: lifecycleError.code, message: lifecycleError.message });
+
+      if (lifecycleError.code === "RESTORE_INELIGIBLE") {
+        setIneligibleIds((current) => new Set([...current, dialog.resource.id]));
+      }
+      if (lifecycleError.code === "RESOURCE_CONFLICT") {
+        setDialog(null);
+        setNotice("This list was out of date. It has been refreshed; review the change again.");
+        await queryClient.invalidateQueries({ queryKey: queryKeys.resources(filters) });
+        await refetch();
+      }
+    } finally {
+      setPendingId(null);
+    }
+  }
 
   return (
     <>
@@ -69,9 +149,17 @@ export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sell
       />
 
       <div className="space-y-4">
+        {notice !== null ? (
+          <div
+            className="rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900"
+            role="status"
+          >
+            {notice}
+          </div>
+        ) : null}
         {data === undefined ? (
           <ErrorState
-            {...normalizeUiError(error, {
+            {...normalizeUiError(queryError, {
               code: "BACKEND_UNAVAILABLE",
               description: "Seller resources could not be verified against the configured backend.",
               title: "Seller resources unavailable"
@@ -138,17 +226,11 @@ export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sell
                         disabled={disabledIds.has(resource.id)}
                         editable={demo && canMutate}
                         key={resource.id}
-                        onDisable={() =>
-                          setDisabledIds((current) => new Set([...current, resource.id]))
-                        }
-                        onRestore={() =>
-                          setDisabledIds((current) => {
-                            const next = new Set(current);
-                            next.delete(resource.id);
-                            return next;
-                          })
-                        }
+                        onDisable={() => openDialog("disable", resource)}
+                        onRestore={() => openDialog("restore", resource)}
+                        pending={pendingId === resource.id}
                         resource={resource}
+                        restoreBlocked={ineligibleIds.has(resource.id)}
                       />
                     ))}
                   </tbody>
@@ -158,23 +240,122 @@ export function SellerResourceList({ sellerId = "seller_atlas_weather" }: { sell
           )
         ) : null}
       </div>
+
+      {dialog !== null ? (
+        <div
+          aria-label={
+            dialog.action === "disable" ? "Confirm resource disable" : "Confirm resource restore"
+          }
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-4 sm:items-center"
+          role="dialog"
+        >
+          <Card className="w-full max-w-lg">
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-slate-950">
+                {dialog.action === "disable" ? "Remove from discovery" : "Restore to discovery"}
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                {dialog.resource.name} · version {dialog.resource.updatedAt}
+              </p>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              {dialog.action === "disable" ? (
+                <>
+                  <p className="text-sm text-slate-700">
+                    Buyers will no longer discover this resource. Already issued payment
+                    authorizations are not revoked by this change.
+                  </p>
+                  <label className="block space-y-1">
+                    <span className="text-sm font-medium text-slate-700">Reason</span>
+                    <textarea
+                      className="min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+                      onChange={(event) => setReason(event.target.value)}
+                      value={reason}
+                    />
+                  </label>
+                </>
+              ) : (
+                <p className="text-sm text-slate-700">
+                  Restoring makes an eligible inactive version discoverable again. The backend must
+                  accept eligibility before the list changes.
+                </p>
+              )}
+
+              <label className="flex items-start gap-2 text-sm text-slate-700">
+                <input
+                  checked={confirmed}
+                  className="mt-1 h-4 w-4 rounded border-slate-300"
+                  onChange={(event) => setConfirmed(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>
+                  I understand this change applies to the current resource version and cannot be
+                  undone by refreshing.
+                </span>
+              </label>
+
+              {error !== null ? (
+                <div
+                  className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+                  role="alert"
+                >
+                  <p className="font-medium">{error.code}</p>
+                  <p className="mt-1">{error.message}</p>
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  disabled={pendingId !== null}
+                  onClick={closeDialog}
+                  type="button"
+                  variant="secondary"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  disabled={
+                    pendingId !== null ||
+                    !confirmed ||
+                    (dialog.action === "disable" && reason.trim().length === 0)
+                  }
+                  onClick={() => void submitMutation()}
+                  type="button"
+                  variant={dialog.action === "disable" ? "danger" : "primary"}
+                >
+                  {pendingId !== null
+                    ? "Submitting"
+                    : dialog.action === "disable"
+                      ? "Disable discovery"
+                      : "Restore resource"}
+                </Button>
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+      ) : null}
     </>
   );
 }
 
 function ResourceRow({
-  disabled,
   editable,
   onDisable,
   onRestore,
-  resource
+  pending,
+  resource,
+  restoreBlocked
 }: {
-  disabled: boolean;
   editable: boolean;
   onDisable: () => void;
   onRestore: () => void;
+  pending: boolean;
   resource: Resource;
+  restoreBlocked: boolean;
 }) {
+  const inactive = resource.status === "inactive";
+
   return (
     <tr className="align-top">
       <td className="px-3 py-3">
@@ -220,12 +401,17 @@ function ResourceRow({
             </Link>
           ) : null}
           {editable &&
-            (disabled ? (
+            (inactive ? (
               <Button
                 aria-label={`Restore ${resource.name}`}
                 className="min-h-9 px-2"
+                disabled={pending || restoreBlocked}
                 onClick={onRestore}
-                title="Restore resource"
+                title={
+                  restoreBlocked
+                    ? "The backend rejected restore eligibility for this resource"
+                    : "Restore resource"
+                }
                 type="button"
                 variant="secondary"
               >
@@ -235,6 +421,7 @@ function ResourceRow({
               <Button
                 aria-label={`Disable ${resource.name}`}
                 className="min-h-9 px-2"
+                disabled={pending}
                 onClick={onDisable}
                 title="Disable resource"
                 type="button"
