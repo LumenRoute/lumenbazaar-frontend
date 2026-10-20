@@ -28,32 +28,30 @@ export type ExploreSearchResult = SearchResult & {
 
 type CatalogClient = Pick<LumenBazaarApiClient, "searchResources">;
 
+/**
+ * Searches the catalog against the configured backend.
+ *
+ * Bundled fixtures are reachable only through the explicitly named demo path,
+ * which runs when the runtime mode is `demo`. Every live mode (`local`,
+ * `testnet`, `mainnet`) propagates backend failures unchanged: an outage never
+ * produces a fixture-backed result that could be mistaken for live data.
+ */
 export async function searchCatalog(
   input: ExploreSearchInput,
   client: CatalogClient = apiClient,
   mode: RuntimeEnvironment = currentRuntimeMode()
 ): Promise<ExploreSearchResult> {
   if (isDemoMode(mode)) {
-    return {
-      fetchedAt: new Date().toISOString(),
-      nextCursor: null,
-      partialResults: false,
-      ranking: {
-        strategy: "fixture-text-search"
-      },
-      resources: sortResources(filterDemoResources(input), input.sort ?? "relevance").map(
-        (resource, index) => ({
-          ...resource,
-          ranking: {
-            matchedTerms: tokenize(input.q ?? ""),
-            score: 100 - index
-          }
-        })
-      ),
-      source: "demo"
-    };
+    return searchDemoCatalog(input);
   }
 
+  return searchLiveCatalog(input, client);
+}
+
+async function searchLiveCatalog(
+  input: ExploreSearchInput,
+  client: CatalogClient
+): Promise<ExploreSearchResult> {
   const result = await client.searchResources({
     cursor: input.cursor,
     extension: input.extension,
@@ -71,6 +69,31 @@ export async function searchCatalog(
     ...sortSearchResult(result, input.sort ?? "relevance"),
     fetchedAt: new Date().toISOString(),
     source: "api"
+  };
+}
+
+/**
+ * Explicit demo-mode search. This is the only catalog path that reads bundled
+ * fixtures, and it is never invoked for a live runtime mode.
+ */
+function searchDemoCatalog(input: ExploreSearchInput): ExploreSearchResult {
+  return {
+    fetchedAt: new Date().toISOString(),
+    nextCursor: null,
+    partialResults: false,
+    ranking: {
+      strategy: "fixture-text-search"
+    },
+    resources: sortResources(filterDemoResources(input), input.sort ?? "relevance").map(
+      (resource, index) => ({
+        ...resource,
+        ranking: {
+          matchedTerms: tokenize(input.q ?? ""),
+          score: 100 - index
+        }
+      })
+    ),
+    source: "demo"
   };
 }
 

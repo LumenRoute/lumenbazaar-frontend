@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { demoResources } from "@/fixtures/lumenbazaar";
+import type { Resource } from "@/services/api/schemas";
 import { parseDiscoveryState } from "@/services/discovery-params";
 
 import { ExploreSearch } from "./explore-search";
@@ -21,14 +22,14 @@ vi.mock("@/services/catalog", () => ({
   searchCatalog: mocks.searchCatalog
 }));
 
-function searchResult(resources = demoResources) {
+function searchResult(resources: Resource[] = demoResources, source: "api" | "demo" = "demo") {
   return {
     fetchedAt: "2026-10-18T12:00:00.000Z",
     nextCursor: null,
     partialResults: false,
-    ranking: { strategy: "fixture-text-search" },
+    ranking: { strategy: source === "api" ? "backend-search" : "fixture-text-search" },
     resources,
-    source: "demo" as const
+    source
   };
 }
 
@@ -72,6 +73,7 @@ describe("ExploreSearch", () => {
     expect(screen.getByLabelText("Minimum price")).toHaveValue("0.05");
     expect(screen.getByLabelText("Maximum price")).toHaveValue("0.20");
     expect(await screen.findByText("Paid Weather API")).toBeInTheDocument();
+    expect(screen.getByText("Explicit demo results")).toBeInTheDocument();
 
     expect(mocks.searchCatalog).toHaveBeenCalledWith({
       asset: undefined,
@@ -115,5 +117,39 @@ describe("ExploreSearch", () => {
         `${demoResources[0]!.id},${demoResources[1]!.id}`
       )}`
     );
+  });
+
+  it("shows an accessible unavailable state and retries without rendering fixtures", async () => {
+    mocks.searchCatalog.mockRejectedValueOnce(new Error("offline"));
+
+    renderExplore(parseDiscoveryState(undefined));
+
+    const alert = await screen.findByRole("alert");
+
+    expect(within(alert).getByRole("heading", { name: "Catalog unavailable" })).toBeVisible();
+    expect(within(alert).getByText("offline")).toBeVisible();
+    expect(within(alert).getByRole("button", { name: "Retry" })).toBeVisible();
+    expect(screen.getByText("Results unavailable")).toBeVisible();
+    expect(screen.queryByText("Paid Weather API")).not.toBeInTheDocument();
+    expect(screen.queryByText("No resources matched")).not.toBeInTheDocument();
+
+    mocks.searchCatalog.mockResolvedValueOnce(searchResult([], "api"));
+    await userEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByText("No resources matched")).toBeVisible();
+    expect(mocks.searchCatalog).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("distinguishes an empty live result from an unavailable catalog", async () => {
+    mocks.searchCatalog.mockResolvedValueOnce(searchResult([], "api"));
+
+    renderExplore(parseDiscoveryState(undefined));
+
+    expect(await screen.findByText("No resources matched")).toBeVisible();
+    expect(screen.getByText("0 resources")).toBeVisible();
+    expect(screen.getByText("API results")).toBeVisible();
+    expect(screen.queryByText("Results unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

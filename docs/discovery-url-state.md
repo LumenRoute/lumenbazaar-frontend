@@ -5,18 +5,18 @@ truth, so a copied link, a bookmark, or browser history always reproduces the sa
 
 ## Supported parameters
 
-| Parameter            | Values                                                  | Default     |
-| -------------------- | ------------------------------------------------------- | ----------- |
-| `q`                  | Free-text query, trimmed and capped at 200 characters   | none        |
-| `sort`               | `relevance`, `price-asc`, `price-desc`, `recent`        | `relevance` |
-| `network`            | `stellar:testnet`, `stellar:pubnet`                     | none        |
-| `type`               | `http`, `mcp`                                           | none        |
-| `extension`          | `bazaar`, `mcp`                                         | none        |
-| `sellerVerification` | `any`, `verified`, `unverified`                         | `any`       |
-| `asset`              | Trimmed identifier (`A-Za-z0-9:_.-`, max 128 chars)      | none        |
-| `minPrice`           | Atomic decimal string (`^\d+(\.\d{1,7})?$`)             | none        |
-| `maxPrice`           | Atomic decimal string (`^\d+(\.\d{1,7})?$`)             | none        |
-| `cursor`             | Opaque pagination cursor, max 1024 characters           | none        |
+| Parameter            | Values                                                | Default     |
+| -------------------- | ----------------------------------------------------- | ----------- |
+| `q`                  | Free-text query, trimmed and capped at 200 characters | none        |
+| `sort`               | `relevance`, `price-asc`, `price-desc`, `recent`      | `relevance` |
+| `network`            | `stellar:testnet`, `stellar:pubnet`                   | none        |
+| `type`               | `http`, `mcp`                                         | none        |
+| `extension`          | `bazaar`, `mcp`                                       | none        |
+| `sellerVerification` | `any`, `verified`, `unverified`                       | `any`       |
+| `asset`              | Trimmed identifier (`A-Za-z0-9:_.-`, max 128 chars)   | none        |
+| `minPrice`           | Atomic decimal string (`^\d+(\.\d{1,7})?$`)           | none        |
+| `maxPrice`           | Atomic decimal string (`^\d+(\.\d{1,7})?$`)           | none        |
+| `cursor`             | Opaque pagination cursor, max 1024 characters         | none        |
 
 ## Normalization rules
 
@@ -37,9 +37,25 @@ truth, so a copied link, a bookmark, or browser history always reproduces the sa
 - Invalid URL values are normalized on the server before rendering, so the client and server agree
   on the request that is made.
 
+## Failure behavior
+
+- Live modes (`local`, `testnet`, `mainnet`) never substitute fixtures for a failed discovery
+  request. The API failure propagates and the view renders an accessible **Catalog unavailable**
+  alert with a retry action.
+- A successful response with zero resources renders **No resources matched**, so an outage is never
+  presented as a valid empty search. The result count reads **Results unavailable** instead of
+  `0 resources` while the API is unavailable.
+- Stale results are not rendered after a failed request; retrying the query restores the list when
+  the backend recovers.
+- Bundled fixtures remain reachable only in explicit `demo` mode, where results are labelled
+  **Explicit demo results**.
+
 ## Coverage
 
 - `src/services/discovery-params.test.ts` covers round-tripping, canonicalization, rejection, and
   the guarantee that wallet/payment fields never reach the URL.
-- `src/components/explore/explore-search.test.tsx` covers deep-link restoration and URL writes.
+- `src/services/catalog.test.ts` covers live failure propagation, live-only results, filter
+  forwarding, sorting, and explicit demo-mode fixture search.
+- `src/components/explore/explore-search.test.tsx` covers deep-link restoration, URL writes,
+  unavailable/retry behavior, empty live results, and fixture-free failure rendering.
 - `tests/e2e/discovery-deep-link.spec.ts` runs on the desktop and mobile Playwright projects.

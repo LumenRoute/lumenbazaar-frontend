@@ -47,6 +47,10 @@ export function ExploreSearch({ initialState }: ExploreSearchProps) {
     queryFn: () => searchCatalog(request),
     queryKey: queryKeys.search(request)
   });
+  // A failed request must never be presented as an empty result set, and stale
+  // results must not survive an outage. Both cases use the explicit unavailable
+  // state below, while a successful empty response keeps the empty state.
+  const unavailable = error !== null;
 
   function goTo(next: DiscoveryState) {
     setState(next);
@@ -236,17 +240,28 @@ export function ExploreSearch({ initialState }: ExploreSearchProps) {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          {data ? (
+          {unavailable ? <Badge tone="danger">Catalog unavailable</Badge> : null}
+          {!unavailable && data ? (
             <Badge tone={data.source === "api" ? "success" : "warning"}>
               {data.source === "api" ? "API results" : "Explicit demo results"}
             </Badge>
           ) : null}
-          {data?.partialResults ? <Badge tone="warning">Partial results</Badge> : null}
-          {data ? <DataFreshnessBadge observedAt={data.fetchedAt} source={data.source} /> : null}
+          {!unavailable && data?.partialResults ? (
+            <Badge tone="warning">Partial results</Badge>
+          ) : null}
+          {!unavailable && data ? (
+            <DataFreshnessBadge observedAt={data.fetchedAt} source={data.source} />
+          ) : null}
           {state.cursor ? <Badge tone="info">Cursor page</Badge> : null}
         </div>
         <p className="text-sm text-slate-600">
-          {isFetching ? "Refreshing" : `${data?.resources.length ?? 0} resources`}
+          {unavailable
+            ? "Results unavailable"
+            : isFetching
+              ? "Refreshing"
+              : data === undefined
+                ? "Loading resources"
+                : `${data.resources.length} resources`}
         </p>
       </div>
 
@@ -297,18 +312,21 @@ export function ExploreSearch({ initialState }: ExploreSearchProps) {
         </p>
       ) : null}
 
-      {data === undefined && error !== null ? (
-        <ErrorState
-          {...normalizeUiError(error, {
-            code: "BACKEND_UNAVAILABLE",
-            description: "Resource discovery could not be verified against the configured backend.",
-            title: "Catalog unavailable"
-          })}
-          onRetry={() => void refetch()}
-        />
+      {unavailable ? (
+        <div role="alert">
+          <ErrorState
+            {...normalizeUiError(error, {
+              code: "BACKEND_UNAVAILABLE",
+              description:
+                "Resource discovery could not be verified against the configured backend.",
+              title: "Catalog unavailable"
+            })}
+            onRetry={() => void refetch()}
+          />
+        </div>
       ) : null}
 
-      {data !== undefined && data.resources.length === 0 ? (
+      {!unavailable && data !== undefined && data.resources.length === 0 ? (
         <EmptyState
           title="No resources matched"
           description="Try a broader query or remove filters. Shareable links keep every filter in the URL."
@@ -316,22 +334,23 @@ export function ExploreSearch({ initialState }: ExploreSearchProps) {
       ) : null}
 
       <div className="grid gap-3" aria-live="polite">
-        {data?.resources.map((resource) => (
-          <ResourceCard
-            compare={{
-              disabled: selectedIds.length >= maxComparisonResources,
-              onToggle: () => toggleComparison(resource.id),
-              selected: selectedIds.includes(resource.id)
-            }}
-            key={resource.id}
-            partialResults={data.partialResults}
-            resource={resource}
-          />
-        ))}
+        {!unavailable &&
+          data?.resources.map((resource) => (
+            <ResourceCard
+              compare={{
+                disabled: selectedIds.length >= maxComparisonResources,
+                onToggle: () => toggleComparison(resource.id),
+                selected: selectedIds.includes(resource.id)
+              }}
+              key={resource.id}
+              partialResults={data.partialResults}
+              resource={resource}
+            />
+          ))}
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {data?.nextCursor ? (
+        {!unavailable && data?.nextCursor ? (
           <Button
             onClick={() => goTo({ ...state, cursor: data.nextCursor ?? undefined })}
             type="button"
