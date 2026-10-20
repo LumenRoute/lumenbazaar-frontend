@@ -446,6 +446,19 @@ if (canonicalUrl(challenge.resource.url) !== canonicalUrl(expected.resourceUrl))
 }
 ```
 
+## Pending Payment Account Binding
+
+When a payment is authorized, the initiating public account is stored with the recovery
+metadata (never a signature, header, XDR, or key material). Recovery stays available after
+the browser account changes, but it is read-only:
+
+- A pending or unresolved attempt is reported as `changed` when the active wallet account
+  differs from the initiating account, and the UI blocks new payment actions.
+- Receipt lookups and confirmed receipt evidence remain available in that state.
+- Switching back to the initiating account reports `matches` and restores eligibility.
+- Signing is also guarded at the wallet prompt, so an account switch before signing fails
+  closed with `WALLET_ACCOUNT_CHANGED`.
+
 ## Implementation Files
 
 - **Validation utilities**: `src/services/x402/validation.ts`

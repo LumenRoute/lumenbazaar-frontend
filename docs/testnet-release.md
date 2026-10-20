@@ -338,6 +338,26 @@ The telemetry service uses a replaceable sink interface:
 
 Events sent to sinks are pre-validated and redacted; sinks do not perform additional filtering.
 
+## Production Security Headers
+
+Every response is served with the policy built in `src/config/security.ts` and applied by
+`next.config.ts`. `connect-src` is limited to `'self'`, the configured backend API, and the
+RPC and Horizon endpoints of `NEXT_PUBLIC_LUMENBAZAAR_DEFAULT_NETWORK`. Frame embedding is
+disabled (`frame-ancestors 'none'`, `X-Frame-Options: DENY`) and no wildcard origins are
+allowed.
+
+Additional service origins (for example a documentation or wallet relay host) must be
+declared explicitly and are validated as bare `https` origins:
+
+```bash
+NEXT_PUBLIC_LUMENBAZAAR_TRUSTED_ORIGINS=https://docs.stellar.org,https://wallet.example
+```
+
+`http` origins are accepted only for `localhost`/`127.0.0.1`. Wildcard, credential, path,
+and query values fail configuration loading. `script-src` keeps `'unsafe-inline'` because
+Next.js App Router hydration needs inline bootstrap scripts without a nonce; `unsafe-eval`
+is never allowed. HSTS is emitted only when `NODE_ENV=production`.
+
 ## Known Limitations
 
 - Gate C remains pending until the frontend and Phase 24 backend are deployed and the external

@@ -83,6 +83,27 @@ export async function connectFreighterWallet(
   });
 }
 
+/**
+ * Reads the currently selected Freighter public account without prompting.
+ * Returns undefined when the extension is unavailable, locked, or not
+ * authorized, allowing callers to fall back to read-only recovery.
+ */
+export async function readActiveWalletAccount(): Promise<string | undefined> {
+  if (typeof window === "undefined") return undefined;
+
+  try {
+    const freighter = await import("@stellar/freighter-api");
+    const allowed = await freighter.isAllowed();
+    if (extractFreighterError(allowed) !== undefined || !allowed.isAllowed) return undefined;
+
+    const result = await freighter.getAddress();
+    if (extractFreighterError(result) !== undefined) return undefined;
+    return result.address;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function disconnectWallet(
   expectedNetwork: NetworkId = loadRuntimeConfig().defaultNetwork
 ) {

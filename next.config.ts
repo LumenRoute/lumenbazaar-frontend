@@ -1,8 +1,19 @@
 import type { NextConfig } from "next";
 
+import { loadRuntimeConfig } from "./src/config/runtime";
+import { buildSecurityHeaders } from "./src/config/security";
+
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   reactStrictMode: true,
-  poweredByHeader: false
+  async headers() {
+    return [
+      {
+        headers: buildSecurityHeaders(loadRuntimeConfig()),
+        source: "/:path*"
+      }
+    ];
+  }
 };
 
 export default nextConfig;

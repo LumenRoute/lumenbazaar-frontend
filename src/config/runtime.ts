@@ -19,7 +19,8 @@ const rawPublicEnvSchema = z.object({
   NEXT_PUBLIC_ENABLE_UPTO_SESSIONS: booleanFlagSchema,
   NEXT_PUBLIC_LUMENBAZAAR_API_URL: z.string().url().default("http://localhost:8080"),
   NEXT_PUBLIC_LUMENBAZAAR_DEFAULT_NETWORK: networkIdSchema.default("stellar:testnet"),
-  NEXT_PUBLIC_LUMENBAZAAR_ENV: runtimeEnvironmentSchema.default("local")
+  NEXT_PUBLIC_LUMENBAZAAR_ENV: runtimeEnvironmentSchema.default("local"),
+  NEXT_PUBLIC_LUMENBAZAAR_TRUSTED_ORIGINS: z.string().default("")
 });
 
 export type RuntimeEnvironment = z.infer<typeof runtimeEnvironmentSchema>;
@@ -37,6 +38,8 @@ export type RuntimeConfig = {
   environment: RuntimeEnvironment;
   features: FeatureFlags;
   networks: typeof stellarNetworks;
+  /** Extra https origins allowed by the Content Security Policy connect-src. */
+  trustedOrigins: string[];
 };
 
 export function loadRuntimeConfig(
@@ -68,7 +71,8 @@ export function loadRuntimeConfig(
       enableTelemetry: parsed.data.NEXT_PUBLIC_ENABLE_TELEMETRY,
       enableUptoSessions: parsed.data.NEXT_PUBLIC_ENABLE_UPTO_SESSIONS
     },
-    networks: stellarNetworks
+    networks: stellarNetworks,
+    trustedOrigins: parseTrustedOrigins(parsed.data.NEXT_PUBLIC_LUMENBAZAAR_TRUSTED_ORIGINS)
   };
 }
 
@@ -80,8 +84,53 @@ function bundledPublicEnvironment() {
     NEXT_PUBLIC_ENABLE_UPTO_SESSIONS: process.env.NEXT_PUBLIC_ENABLE_UPTO_SESSIONS,
     NEXT_PUBLIC_LUMENBAZAAR_API_URL: process.env.NEXT_PUBLIC_LUMENBAZAAR_API_URL,
     NEXT_PUBLIC_LUMENBAZAAR_DEFAULT_NETWORK: process.env.NEXT_PUBLIC_LUMENBAZAAR_DEFAULT_NETWORK,
-    NEXT_PUBLIC_LUMENBAZAAR_ENV: process.env.NEXT_PUBLIC_LUMENBAZAAR_ENV
+    NEXT_PUBLIC_LUMENBAZAAR_ENV: process.env.NEXT_PUBLIC_LUMENBAZAAR_ENV,
+    NEXT_PUBLIC_LUMENBAZAAR_TRUSTED_ORIGINS: process.env.NEXT_PUBLIC_LUMENBAZAAR_TRUSTED_ORIGINS
   };
+}
+
+/**
+ * Parses the comma-separated CSP allowlist. Each entry must be a bare https
+ * origin (http is accepted only for loopback development hosts). Wildcards,
+ * paths, credentials, and query strings fail closed instead of silently
+ * widening the policy.
+ */
+export function parseTrustedOrigins(value: string): string[] {
+  const origins = new Set<string>();
+
+  for (const entry of value.split(",")) {
+    const candidate = entry.trim();
+    if (candidate === "") continue;
+
+    if (candidate.includes("*")) {
+      throw new Error(
+        `Invalid LumenBazaar frontend configuration: wildcard CSP origins are not allowed (${candidate})`
+      );
+    }
+
+    let url: URL;
+    try {
+      url = new URL(candidate);
+    } catch {
+      throw new Error(
+        `Invalid LumenBazaar frontend configuration: malformed CSP origin (${candidate})`
+      );
+    }
+
+    const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    const allowedProtocol = url.protocol === "https:" || (loopback && url.protocol === "http:");
+    const bareOrigin = url.pathname === "/" && url.search === "" && url.hash === "";
+
+    if (!allowedProtocol || !bareOrigin || url.username !== "" || url.password !== "") {
+      throw new Error(
+        `Invalid LumenBazaar frontend configuration: untrusted CSP origin (${candidate})`
+      );
+    }
+
+    origins.add(url.origin);
+  }
+
+  return [...origins];
 }
 
 export function stripTrailingSlash(value: string) {
