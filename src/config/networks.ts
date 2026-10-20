@@ -78,3 +78,31 @@ export const stellarNetworks: Record<NetworkId, NetworkConfig> = {
 export function getNetworkConfig(network: NetworkId) {
   return stellarNetworks[network];
 }
+
+/**
+ * Resolves the network passphrase a wallet reports into a configured network id.
+ *
+ * Wallets expose their active network as a network passphrase rather than an
+ * identifier, so every network comparison has to translate it first. A
+ * passphrase that is not configured here resolves to `undefined` and must be
+ * treated as an unverified network instead of being assumed to be safe.
+ */
+export function resolveNetworkId(passphrase: string | undefined): NetworkId | undefined {
+  if (passphrase === undefined || passphrase.trim() === "") {
+    return undefined;
+  }
+
+  return (Object.keys(stellarNetworks) as NetworkId[]).find(
+    (id) => stellarNetworks[id].passphrase === passphrase
+  );
+}
+
+/**
+ * Human readable label for a network id.
+ *
+ * Unknown networks are labeled honestly instead of being presented as one of
+ * the supported networks.
+ */
+export function networkLabel(network: NetworkId | undefined): string {
+  return network === undefined ? "Unknown network" : stellarNetworks[network].label;
+}

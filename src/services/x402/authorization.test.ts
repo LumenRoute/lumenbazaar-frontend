@@ -66,6 +66,41 @@ describe("Freighter x402 authorization", () => {
     );
   });
 
+  it("blocks signing when the wallet is on a different network than the payment", async () => {
+    const error = await captureAuthorizationError(
+      authorizePaymentChallenge(challenge(), {
+        connectWallet: async () =>
+          connection({
+            actualNetwork: "stellar:pubnet",
+            networkName: "PUBLIC",
+            networkPassphrase: getNetworkConfig("stellar:pubnet").passphrase,
+            status: "mismatch"
+          }),
+        createScheme: schemeCallingWallet,
+        now: () => 2_000,
+        walletApi: wallet()
+      })
+    );
+
+    expect(error.code).toBe("WALLET_NETWORK_MISMATCH");
+    expect(error.message).toContain(getNetworkConfig("stellar:pubnet").label);
+    expect(error.message).toContain(getNetworkConfig("stellar:testnet").label);
+  });
+
+  it("blocks signing when the wallet network cannot be verified", async () => {
+    const error = await captureAuthorizationError(
+      authorizePaymentChallenge(challenge(), {
+        connectWallet: async () => connection({ status: "network_unknown" }),
+        createScheme: schemeCallingWallet,
+        now: () => 2_000,
+        walletApi: wallet()
+      })
+    );
+
+    expect(error.code).toBe("WALLET_NETWORK_MISMATCH");
+    expect(error.message).toContain(getNetworkConfig("stellar:testnet").label);
+  });
+
   it("rejects an account change at the signature prompt", async () => {
     await expectAuthorizationCode(wallet({ address: "GCHANGED" }), "WALLET_ACCOUNT_CHANGED");
   });
@@ -99,20 +134,17 @@ describe("Freighter x402 authorization", () => {
   });
 
   it("times out wallet signing after configured timeout duration", async () => {
-    const delayedWallet = {
-      ...wallet(),
-      signAuthEntry: vi.fn(
-        () =>
-          new Promise((resolve) => {
-            setTimeout(() => {
-              resolve({
-                signedAuthEntry: "signed-auth-entry",
-                signerAddress: account
-              });
-            }, 2000); // Simulate slow response
-          })
-      )
-    };
+    const delayedWallet = wallet({
+      signAuthEntry: async () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({
+              signedAuthEntry: "signed-auth-entry",
+              signerAddress: account
+            });
+          }, 2000); // Simulate slow response
+        })
+    });
 
     await expect(
       authorizePaymentChallenge(challenge(), {
@@ -140,21 +172,23 @@ describe("Freighter x402 authorization", () => {
   });
 
   it("distinguishes between wallet rejection and timeout", async () => {
-    const rejectionError = await authorizePaymentChallenge(challenge(), {
-      connectWallet: async () => connection(),
-      createScheme: schemeCallingWallet,
-      now: () => 2_000,
-      walletApi: wallet({ signError: { message: "User declined" } })
-    }).catch((e) => e as AuthorizationError);
+    const rejectionError = await captureAuthorizationError(
+      authorizePaymentChallenge(challenge(), {
+        connectWallet: async () => connection(),
+        createScheme: schemeCallingWallet,
+        now: () => 2_000,
+        walletApi: wallet({ signError: { message: "User declined" } })
+      })
+    );
 
-    const timeoutError = await authorizePaymentChallenge(challenge(), {
-      connectWallet: async () => connection(),
-      createScheme: schemeCallingWallet,
-      now: () => 2_000,
-      signingTimeoutMs: 10,
-      walletApi: wallet({
-        signAuthEntry: vi.fn(
-          () =>
+    const timeoutError = await captureAuthorizationError(
+      authorizePaymentChallenge(challenge(), {
+        connectWallet: async () => connection(),
+        createScheme: schemeCallingWallet,
+        now: () => 2_000,
+        signingTimeoutMs: 10,
+        walletApi: wallet({
+          signAuthEntry: async () =>
             new Promise((resolve) => {
               setTimeout(() => {
                 resolve({
@@ -163,42 +197,23 @@ describe("Freighter x402 authorization", () => {
                 });
               }, 100);
             })
-        )
+        })
       })
-    }).catch((e) => e as AuthorizationError);
+    );
 
     expect(rejectionError.code).toBe("WALLET_REJECTED");
     expect(timeoutError.code).toBe("WALLET_SIGNING_TIMEOUT");
   });
 
   it("ensures focus can be safely retried after rejection without duplicate authorization", async () => {
-    let callCount = 0;
-    const trackedWallet = {
-      ...wallet(),
-      signAuthEntry: vi.fn(async () => {
-        callCount++;
-        if (callCount === 1) {
-          throw new Error("User declined");
-        }
-        return {
-          signedAuthEntry: "signed-auth-entry",
-          signerAddress: account
-        };
+    const firstAttempt = await captureAuthorizationError(
+      authorizePaymentChallenge(challenge(), {
+        connectWallet: async () => connection(),
+        createScheme: schemeCallingWallet,
+        now: () => 2_000,
+        walletApi: wallet({ signError: { message: "User declined" } })
       })
-    };
-
-    // First attempt: rejected
-    const firstAttempt = await authorizePaymentChallenge(challenge(), {
-      connectWallet: async () => connection(),
-      createScheme: schemeCallingWallet,
-      now: () => 2_000,
-      walletApi: {
-        ...trackedWallet,
-        signAuthEntry: vi.fn(async () => {
-          throw { error: { message: "User declined" } };
-        })
-      }
-    }).catch((e) => e as AuthorizationError);
+    );
 
     expect(firstAttempt.code).toBe("WALLET_REJECTED");
 
@@ -255,29 +270,21 @@ describe("Freighter x402 authorization", () => {
   });
 
   it("detects clock drift: expires precisely at the moment signAuthEntry is called", async () => {
-    // expiresAt=3_000; time advances 500ms per call: 1→1500, 2→2000, 3→2500, 4→3000
-    // The 4th call to now() (inside signAuthEntry) crosses the boundary.
+    // The challenge expires at 1_500 and the clock advances 600ms per read:
+    // call 1 (pre-connect check): 600 — fresh
+    // call 2 (inside signAuthEntry): 1200 — fresh
+    // call 3 (post-sign check): 1800 — expired
     let calls = 0;
     const driftingClock = () => {
       calls++;
-      return calls * 500;
+      return calls * 600;
     };
 
-    // With expiresAt=3_000 and clock advancing by 500ms per call:
-    // call 1 (pre-connect check): 500  — fresh
-    // call 2 (inside signAuthEntry): 1000 — fresh
-    // call 3 (post-sign check): 1500 — fresh
-    // So we need expiresAt=1_500 and 3 calls to trigger expiry right at sign
-    const driftedCalls2 = () => {
-      calls++;
-      return calls * 600; // 600, 1200, 1800
-    };
-    calls = 0;
     await expect(
       authorizePaymentChallenge(challenge({ expiresAt: 1_500 }), {
         connectWallet: async () => connection(),
         createScheme: schemeCallingWallet,
-        now: driftedCalls2,
+        now: driftingClock,
         walletApi: wallet()
       })
     ).rejects.toMatchObject({ code: "CHALLENGE_EXPIRED" });
@@ -330,6 +337,11 @@ function wallet(
     address?: string;
     addressError?: { message?: string };
     networkPassphrase?: string;
+    signAuthEntry?: () => Promise<{
+      error?: { message?: string };
+      signedAuthEntry: string | null;
+      signerAddress: string;
+    }>;
     signError?: { message?: string };
     signedAuthEntry?: string | null;
   } = {}
@@ -343,12 +355,17 @@ function wallet(
       network: "TESTNET",
       networkPassphrase: overrides.networkPassphrase ?? testnetPassphrase
     })),
-    signAuthEntry: vi.fn(async () => ({
-      ...(overrides.signError === undefined ? {} : { error: overrides.signError }),
-      signedAuthEntry:
-        overrides.signedAuthEntry === undefined ? "signed-auth-entry" : overrides.signedAuthEntry,
-      signerAddress: account
-    }))
+    signAuthEntry: vi.fn(
+      overrides.signAuthEntry ??
+        (async () => ({
+          ...(overrides.signError === undefined ? {} : { error: overrides.signError }),
+          signedAuthEntry:
+            overrides.signedAuthEntry === undefined
+              ? "signed-auth-entry"
+              : overrides.signedAuthEntry,
+          signerAddress: account
+        }))
+    )
   };
 }
 
@@ -379,4 +396,17 @@ async function expectAuthorizationCode(
       walletApi
     })
   ).rejects.toMatchObject({ code });
+}
+
+async function captureAuthorizationError(pending: Promise<unknown>): Promise<AuthorizationError> {
+  try {
+    await pending;
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return error;
+    }
+    throw error;
+  }
+
+  throw new Error("Expected the wallet authorization to fail.");
 }
