@@ -1,7 +1,7 @@
 "use client";
 
 import { ExternalLink, RefreshCw, ShieldCheck, WalletCards } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,8 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
   const [clock, setClock] = useState(() => Date.now());
   const activeRequest = useRef<AbortController | null>(null);
   const fingerprint = useRef<string | undefined>(undefined);
+  const errorId = useId();
+  const flowStateId = useId();
   const paymentLocked = outcome?.state === "pending" || outcome?.state === "indeterminate";
   const secondsRemaining =
     challenge === undefined ? undefined : challengeSecondsRemaining(challenge, clock);
@@ -209,6 +211,7 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
             disabled={isLoading || isPaying || paymentLocked}
             onClick={() => void requestTerms()}
             type="button"
+            aria-describedby={error !== undefined ? errorId : undefined}
           >
             <ShieldCheck aria-hidden="true" className="h-4 w-4" />
             {isLoading ? "Requesting" : challenge === undefined ? "Request terms" : "Refresh terms"}
@@ -221,7 +224,9 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
         {error !== undefined ? (
           <div
             className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+            id={errorId}
             role="alert"
+            tabIndex={-1}
           >
             {error}
           </div>
@@ -242,8 +247,9 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
                       ? "text-xs font-medium text-amber-700"
                       : "text-xs text-slate-500"
                   }
-                  aria-live="polite"
+                  aria-live="off"
                   aria-label={`Challenge expires in ${secondsRemaining} seconds`}
+                  role="timer"
                 >
                   Expires in {secondsRemaining}s
                 </span>
@@ -300,6 +306,7 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
                   disabled={isSigning || isExpired}
                   onClick={() => void authorize()}
                   type="button"
+                  aria-describedby={isExpired ? errorId : undefined}
                 >
                   <WalletCards aria-hidden="true" className="h-4 w-4" />
                   {isSigning ? "Authorizing" : "Authorize payment"}
@@ -309,6 +316,7 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
                   disabled={isPaying || outcome !== undefined}
                   onClick={() => void submitPaidRequest()}
                   type="button"
+                  aria-busy={isPaying}
                 >
                   <ShieldCheck aria-hidden="true" className="h-4 w-4" />
                   {isPaying ? "Submitting" : "Submit paid request"}
@@ -318,7 +326,12 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
           </div>
         )}
         {flowState !== undefined ? (
-          <div aria-live="polite" className="mt-4 border-t border-slate-200 pt-4">
+          <div
+            aria-live="polite"
+            className="mt-4 border-t border-slate-200 pt-4"
+            id={flowStateId}
+            role="status"
+          >
             <Badge tone={flowTone(flowState)}>{paidFlowStateLabels[flowState]}</Badge>
           </div>
         ) : null}
@@ -326,6 +339,7 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
           <div
             className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"
             role="alert"
+            aria-live="assertive"
           >
             This pending payment was authorized by{" "}
             <span className="break-all font-medium">
@@ -342,6 +356,7 @@ export function PaymentChallengePanel({ resource, source }: PaymentChallengePane
               onClick={() => void resumeFinality()}
               type="button"
               variant="secondary"
+              aria-busy={isCheckingFinality}
             >
               <RefreshCw aria-hidden="true" className="h-4 w-4" />
               {isCheckingFinality ? "Checking finality" : "Resume receipt check"}
@@ -374,6 +389,7 @@ function PaymentOutcome({ outcome }: { outcome: PaidFlowOutcome }) {
         <div
           className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"
           role="alert"
+          aria-live="polite"
         >
           <h3 className="mb-2 font-semibold">Receipt evidence validation warnings</h3>
           <ul className="space-y-1">
@@ -409,6 +425,7 @@ function PaymentOutcome({ outcome }: { outcome: PaidFlowOutcome }) {
           href={explorerTransactionUrl(network, transactionHash) ?? undefined}
           rel="noreferrer"
           target="_blank"
+          aria-label={`View Stellar transaction ${transactionHash} on the block explorer (opens in a new tab)`}
         >
           <ExternalLink aria-hidden="true" className="h-4 w-4" />
           Stellar transaction
@@ -417,7 +434,10 @@ function PaymentOutcome({ outcome }: { outcome: PaidFlowOutcome }) {
       {outcome.paidResponse !== undefined ? (
         <div>
           <h3 className="text-sm font-semibold text-slate-950">Paid response</h3>
-          <pre className="mt-2 max-h-80 overflow-auto rounded-md bg-slate-950 p-4 text-xs leading-5 text-white">
+          <pre
+            className="mt-2 max-h-80 overflow-auto rounded-md bg-slate-950 p-4 text-xs leading-5 text-white"
+            tabIndex={0}
+          >
             {formatPaidResponse(outcome.paidResponse.body)}
           </pre>
         </div>
