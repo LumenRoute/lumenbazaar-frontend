@@ -23,6 +23,7 @@
     "screenshots:release": "pnpm test:e2e:release-screenshots && pnpm screenshots:organize",
     "test:watch": "vitest",
     "audit:prod": "node scripts/audit-production.mjs",
+    "check:docs-links": "node scripts/check-docs-links.mjs",
     "verify-backend-pin": "node scripts/verify-backend-pin.mjs",
     "update-backend-pin": "node scripts/update-backend-pin.mjs",
     "generate-client": "node scripts/update-backend-pin.mjs",

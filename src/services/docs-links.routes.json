@@ -1,0 +1,10 @@
+{
+  "seller": "/guides/seller-guide",
+  "buyer": "/guides/buyer-guide",
+  "agent": "/guides/agent-guide",
+  "mcp": "/api-reference/mcp",
+  "operator": "/operations/self-hosting",
+  "api": "/api-reference/facilitator",
+  "contracts": "/contracts/upto-session",
+  "security": "/security/threat-model"
+}

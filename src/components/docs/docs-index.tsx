@@ -10,7 +10,7 @@ export function DocsIndex() {
   return (
     <>
       <PageHeader
-        description="Jump to canonical seller, buyer, agent, operator, API, contract, and security documentation."
+        description="Jump to canonical seller, buyer, agent, MCP, operator, API, contract, and security documentation."
         title="Documentation"
       />
 
