@@ -23,6 +23,7 @@ import {
 import { maxComparisonResources } from "@/services/resource-comparison";
 import { queryKeys } from "@/services/api/query";
 import { searchCatalog, type ResourceSort } from "@/services/catalog";
+import { runtimeConfig } from "@/config/runtime";
 import { normalizeUiError } from "@/services/ui-state";
 
 type ExploreSearchProps = {
@@ -34,6 +35,12 @@ const sortOptions: Array<{ label: string; value: ResourceSort }> = [
   { label: "Price low to high", value: "price-asc" },
   { label: "Price high to low", value: "price-desc" },
   { label: "Recently updated", value: "recent" }
+];
+
+const networkOptions = [
+  { label: "All networks", value: "" },
+  { label: "stellar:testnet", value: "stellar:testnet" },
+  ...(runtimeConfig.enableMainnet ? [{ label: "stellar:pubnet", value: "stellar:pubnet" }] : [])
 ];
 
 export function ExploreSearch({ initialState }: ExploreSearchProps) {
@@ -136,9 +143,11 @@ export function ExploreSearch({ initialState }: ExploreSearchProps) {
                 }
                 value={filters.network ?? ""}
               >
-                <option value="">All networks</option>
-                <option value="stellar:testnet">stellar:testnet</option>
-                <option value="stellar:pubnet">stellar:pubnet</option>
+                {networkOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
               <input
                 aria-label="Asset"

@@ -37,7 +37,7 @@ export type RuntimeConfig = {
   defaultNetwork: NetworkId;
   environment: RuntimeEnvironment;
   features: FeatureFlags;
-  networks: typeof stellarNetworks;
+  networks: NetworkId[];
   /** Extra https origins allowed by the Content Security Policy connect-src. */
   trustedOrigins: string[];
 };
@@ -71,9 +71,17 @@ export function loadRuntimeConfig(
       enableTelemetry: parsed.data.NEXT_PUBLIC_ENABLE_TELEMETRY,
       enableUptoSessions: parsed.data.NEXT_PUBLIC_ENABLE_UPTO_SESSIONS
     },
-    networks: stellarNetworks,
+    networks: resolveEnabledNetworks(parsed.data.NEXT_PUBLIC_ENABLE_MAINNET),
     trustedOrigins: parseTrustedOrigins(parsed.data.NEXT_PUBLIC_LUMENBAZAAR_TRUSTED_ORIGINS)
   };
+}
+
+/**
+ * Derives the selectable networks from runtime feature configuration so that
+ * stellar:pubnet is never exposed while mainnet is disabled.
+ */
+export function resolveEnabledNetworks(enableMainnet: boolean): NetworkId[] {
+  return stellarNetworks.filter((network) => network !== "stellar:pubnet" || enableMainnet);
 }
 
 function bundledPublicEnvironment() {
