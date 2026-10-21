@@ -4,11 +4,16 @@ import {
   assetMetadataSchema,
   type AssetMetadata
 } from "@/services/api/schemas";
-import { getNetworkConfig, stellarNetworks, type NetworkId } from "./networks";
+import {
+  getNetworkConfig,
+  getStableNetworkIds,
+  stellarNetworks,
+  type NetworkId
+} from "./networks";
 
 describe("networks config", () => {
   describe("stellarNetworks", () => {
-    it("includes both testnet and pubnet", () => {
+    it("includes testnet and pubnet", () => {
       expect(Object.keys(stellarNetworks).sort()).toEqual([
         "stellar:pubnet",
         "stellar:testnet"
@@ -43,12 +48,30 @@ describe("networks config", () => {
     });
   });
 
+  describe("getStableNetworkIds", () => {
+    it("returns only testnet when mainnet is disabled", () => {
+      expect(getStableNetworkIds(false)).toEqual(["stellar:testnet"]);
+    });
+
+    it("returns testnet and pubnet when mainnet is enabled", () => {
+      expect(getStableNetworkIds(true)).toEqual([
+        "stellar:testnet",
+        "stellar:pubnet"
+      ]);
+    });
+
+    it("keeps testnet as the default", () => {
+      expect(getStableNetworkIds(false)[0]).toBe("stellar:testnet");
+      expect(getStableNetworkIds(true)[0]).toBe("stellar:testnet");
+    });
+  });
+
   describe("asset metadata validation", () => {
     it("validates valid asset metadata", () => {
       const validAsset: AssetMetadata = {
-        contractId: "CA7QYNF7SOWQ4VJNMGEVXZHYQACUIM2MRRPFNQ4SLRJRYE67Z2BJQXMR",
+        contractId: "CA7QYNF7SOWQ4VJVNMGEVXZHYQACUIM2MRRPFNQ4SLRJRYE67Z2BJQXMR",
         decimals: 6,
-        issuer: "GA5ZSEJYB37ENSHJTCQ6GUQ5O6GXJYUYRTP6ESFXUW77K5STH6E3BQI6",
+        issuer: "GA5ZSEJYB37ENSHJTCI6GUQ5O6GXJYUYRTP6ESFXUW77K5STH6E3BQI6",
         symbol: "USDC"
       };
 
@@ -69,7 +92,7 @@ describe("networks config", () => {
 
     it("rejects invalid contract ID", () => {
       const invalidAsset = {
-        contractId: "GBZXN7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE", // account, not contract
+        contractId: "GBZNX7PIRZGNMHGAIQW7QEJWW36L5CVVNRYANMDW2G3QOF2VCR4DQSQE", // account, not contract
         decimals: 6,
         symbol: "USDC"
       };

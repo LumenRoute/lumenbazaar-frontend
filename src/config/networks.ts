@@ -1,7 +1,13 @@
 import { z } from "zod";
 
-export const networkIdSchema = z.enum(["stellar:testnet", "stellar:pubnet"]);
+const allNetworkIds = ["stellar:testnet", "stellar:pubnet"] as const;
+
+export const networkIdSchema = z.enum(allNetworkIds);
 export type NetworkId = z.infer<typeof networkIdSchema>;
+
+export function isMainnetEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_ENABLE_MAINNET === "true";
+}
 
 /**
  * SEP-41 Asset metadata for a Soroban contract-wrapped asset.
@@ -77,4 +83,22 @@ export const stellarNetworks: Record<NetworkId, NetworkConfig> = {
 
 export function getNetworkConfig(network: NetworkId) {
   return stellarNetworks[network];
+}
+
+export function getEnabledNetworkIds(): NetworkId[] {
+  return isMainnetEnabled()
+    ? ["stellar:testnet", "stellar:pubnet"]
+    : ["stellar:testnet"];
+}
+
+export function getEnabledNetworks(): NetworkConfig[] {
+  return getEnabledNetworkIds().map((id) => stellarNetworks[id]);
+}
+
+export function getDefaultNetworkId(): NetworkId {
+  return "stellar:testnet";
+}
+
+export function isNetworkEnabled(network: NetworkId): boolean {
+  return getEnabledNetworkIds().includes(network);
 }
