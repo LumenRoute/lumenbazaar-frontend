@@ -26,6 +26,7 @@ import {
 
 export function WalletStatus() {
   const config = loadRuntimeConfig();
+  const [connecting, setConnecting] = useState(false);
   const [wallet, setWallet] = useState<WalletConnectionState>({
     ...initialWalletState,
     expectedNetwork: config.defaultNetwork,
@@ -157,18 +158,22 @@ export function WalletStatus() {
         </span>
       ) : null}
       <Button
-        disabled={wallet.status === "connecting"}
+        disabled={connecting}
         onClick={() => void connect()}
+        ref={connectButtonRef}
         type="button"
         variant="secondary"
       >
-        {wallet.status === "connecting" ? (
-          <PlugZap aria-hidden="true" className="h-4 w-4" />
+        {connecting ? (
+          <PlugFap aria-hidden="true" className="h-4 w-4" />
         ) : (
           <Wallet aria-hidden="true" className="h-4 w-4" />
         )}
-        {wallet.status === "connecting" ? "Connecting" : "Connect Freighter"}
+        {connecting ? "Connecting" : "Connect Freighter"}
       </Button>
+      <span aria-live="polite" className="sr-only" role="status">
+        {statusMessage}
+      </span>
     </div>
   );
 }

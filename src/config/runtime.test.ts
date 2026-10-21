@@ -37,6 +37,27 @@ describe("runtime configuration", () => {
     ).toThrow("stellar:pubnet requires NEXT_PUBLIC_ENABLE_MAINNET=true");
   });
 
+  it("allows pubnet when the mainnet flag is explicitly enabled", () => {
+    const config = loadRuntimeConfig({
+      NEXT_PUBLIC_ENABLE_MAINNET: "true",
+      NEXT_PUBLIC_LUMENBAZAAR_DEFAULT_NETWORK: "stellar:pubnet"
+    });
+
+    expect(config.features.enableMainnet).toBe(true);
+    expect(config.defaultNetwork).toBe("stellar:pubnet");
+  });
+
+  it("derives network options from runtime feature configuration", () => {
+    const disabled = loadRuntimeConfig({});
+    expect(disabled.networks.map((network) => network.id)).not.toContain("stellar:pubnet");
+    expect(disabled.networks.map((network) => network.id)).toContain("stellar:testnet");
+
+    const enabled = loadRuntimeConfig({
+      NEXT_PUBLIC_ENABLE_MAINNET: "true"
+    });
+    expect(enabled.networks.map((network) => network.id)).toContain("stellar:pubnet");
+  });
+
   it("normalizes API URLs for request construction", () => {
     expect(stripTrailingSlash("https://api.example.test/")).toBe("https://api.example.test");
   });

@@ -9,8 +9,7 @@ import {
   ShieldCheck,
   Wallet
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { useMemo, useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -95,7 +94,14 @@ function DemoPaymentPlayground() {
   const [settlement, setSettlement] = useState<PlaygroundSettlement | null>(null);
   const [error, setError] = useState<{ code: string; message: string; retryable?: boolean } | null>(null);
   const [preflightError, setPreflightError] = useState<PreflightCheckError | null>(null);
-  const [busy, setBusy] = useState<"verify" | "settle" | "preflight" | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [mode, setMode] = useState<"simulation" | "wallet">("simulation");
+
+  const statusRegionRef = useRef<HTMLDivElement | null>(null);
+  const errorRegionRef = useRef<HTMLDivElement | null>(null);
+  const preflightErrorRef = useRef<HTMLDivElement | null>(null);
+  const paidFlowOutcomeRef = useRef<HTMLDivElement | null>(null);
+  const [announcement, setAnnouncement] = useState<string>("");
 
   // Attempt to load live resources on mount
   useEffect(() => {
@@ -124,10 +130,15 @@ function DemoPaymentPlayground() {
     }
   }
 
+  useEffect(() => {
+    if (announcement) {
+      statusRegionRef.current?.focus();
+    }
+  }, [announcement]);
+
   // Get current resources based on mode
   const currentResources = dataMode === "live" && liveResources ? liveResources : demoResources;
 
-  const [busy, setBusy] = useState<"verify" | "settle" | "preflight" | "challenge" | "authorize" | "paying" | null>(null);
   const [challenge, setChallenge] = useState<ValidatedPaymentChallenge | null>(null);
   const [authorization, setAuthorization] = useState<SignedPaymentAuthorization | null>(null);
   const [paidFlowOutcome, setPaidFlowOutcome] = useState<PaidFlowOutcome | null>(null);
@@ -136,6 +147,12 @@ function DemoPaymentPlayground() {
     () => currentResources.find((item) => item.id === selectedResourceId) ?? currentResources[0]!,
     [selectedResourceId, currentResources]
   );
+
+  useEffect(() => {
+    if (error) {
+      errorRegionRef.current?.focus();
+    }
+  }, [error]);
 
   useEffect(() => {
     // Check for interrupted payment recovery on resource change
@@ -162,6 +179,8 @@ function DemoPaymentPlayground() {
     setSettlement(null);
     setError(null);
     setPreflightError(null);
+    setAnnouncement(`Prepared ${resource.name} payment request.`);
+    setMode(authMode);
     return nextRequest;
   }
 
@@ -196,6 +215,8 @@ function DemoPaymentPlayground() {
     setPreflightError(null);
     setPreview(null);
     setPaymentRequest(null);
+    setAnnouncement(`Switched to ${newMode === "live" ? "live API" : "simulation"} mode.`);
+    setMode("simulation");
 
     // Reset selected resource to first available in new mode
     const availableResources = newMode === "live" && liveResources ? liveResources : demoResources;
@@ -219,8 +240,11 @@ function DemoPaymentPlayground() {
 
       if (!result.success) {
         setPreflightError(result.error);
+        setAnnouncement(`Preflight check failed: ${result.error.code}.`);
+        preflightErrorRef.current?.focus();
       } else {
         setPreflightError(null);
+        setAnnouncement("Preflight check passed.");
       }
     } catch (caught) {
       setError(normalizePlaygroundError(caught));
@@ -235,6 +259,7 @@ function DemoPaymentPlayground() {
     setVerification(simulateVerification(request));
     setSettlement(null);
     setError(null);
+    setAnnouncement("Simulated verification complete.");
   }
 
   async function runBackendVerify() {
@@ -247,6 +272,7 @@ function DemoPaymentPlayground() {
     try {
       const verification = await apiClient.verifyPayment(request);
       setVerification(markVerificationAsLive(verification));
+      setAnnouncement("Verification complete.");
     } catch (caught) {
       setVerification(null);
       setError(normalizePlaygroundError(caught));
@@ -262,6 +288,7 @@ function DemoPaymentPlayground() {
     setVerification(currentVerification);
     setSettlement(simulateSettlement(request, currentVerification));
     setError(null);
+    setAnnouncement("Simulated settlement complete.");
   }
 
   async function runBackendSettle() {
@@ -273,6 +300,8 @@ function DemoPaymentPlayground() {
         code: "VERIFY_REQUIRED",
         message: "Verification must succeed before settlement."
       });
+      setAnnouncement("Verification required before settlement.");
+      errorRegionRef.current?.focus();
       return;
     }
 
@@ -282,6 +311,7 @@ function DemoPaymentPlayground() {
     try {
       const settlement = await apiClient.settlePayment(request);
       setSettlement(markSettlementAsLive(settlement));
+      setAnnouncement("Settlement complete.");
     } catch (caught) {
       setSettlement(null);
       setError(normalizePlaygroundError(caught));
@@ -295,6 +325,7 @@ function DemoPaymentPlayground() {
     setChallenge(null);
     setAuthorization(null);
     setPaidFlowOutcome(null);
+    setPaidFlowState(null);
     setBusy("challenge");
     
     try {
@@ -311,6 +342,7 @@ function DemoPaymentPlayground() {
       );
       setChallenge(nextChallenge);
       setMode("wallet");
+      setAnnouncement("Live payment challenge received.");
     } catch (caught) {
       const errorMsg = caught instanceof ChallengeError 
         ? `${caught.code}: ${caught.message}`
@@ -320,6 +352,7 @@ function DemoPaymentPlayground() {
         message: errorMsg,
         retryable: true
       });
+      errorRegionRef.current?.focus();
     } finally {
       setBusy(null);
     }
@@ -334,6 +367,7 @@ function DemoPaymentPlayground() {
     try {
       const auth = await authorizePaymentChallenge(challenge);
       setAuthorization(auth);
+      setAnnouncement("Wallet authorization complete.");
     } catch (caught) {
       const errorMsg = caught instanceof AuthorizationError
         ? `${caught.code}: ${caught.message}`
@@ -343,6 +377,7 @@ function DemoPaymentPlayground() {
         message: errorMsg,
         retryable: caught instanceof AuthorizationError && caught.code !== "WALLET_NETWORK_MISMATCH"
       });
+      errorRegionRef.current?.focus();
     } finally {
       setBusy(null);
     }
@@ -362,6 +397,8 @@ function DemoPaymentPlayground() {
         onState: setPaidFlowState
       });
       setPaidFlowOutcome(result);
+      setAnnouncement(result.message);
+      paidFlowOutcomeRef.current?.focus();
     } catch (caught) {
       setPaidFlowOutcome({
         message: "The paid request ended without a definitive outcome.",
@@ -376,6 +413,7 @@ function DemoPaymentPlayground() {
         }).description,
         retryable: true
       });
+      paidFlowOutcomeRef.current?.focus();
     } finally {
       setBusy(null);
     }
@@ -400,6 +438,16 @@ function DemoPaymentPlayground() {
         description="Select a resource, inspect exact x402 payment requirements, verify a payload, and inspect settlement evidence."
         title="Payment playground"
       />
+
+      <div
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+        ref={statusRegionRef}
+        tabIndex={-1}
+      >
+        {announcement}
+      </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-5">
@@ -432,7 +480,7 @@ function DemoPaymentPlayground() {
               </div>
 
               {apiLoadError ? (
-                <div className="rounded-md border border-red-200 bg-red-50 p-3">
+                <div className="rounded-md border border-red-200 bg-red-50 p-3" role="alert">
                   <div className="flex items-start gap-2">
                     <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 text-red-700" />
                     <div className="flex-1">
@@ -475,7 +523,7 @@ function DemoPaymentPlayground() {
               <label className="block">
                 <span className="mb-1 block text-sm font-medium text-slate-700">Paid resource</span>
                 <select
-                  className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+                  className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus-visible:border-teal-700 focus-visible:ring-2 focus-visible:ring-teal-100"
                   onChange={(event) => {
                     setSelectedResourceId(event.target.value);
                     setPreview(null);
@@ -510,7 +558,7 @@ function DemoPaymentPlayground() {
             </CardHeader>
             <CardBody className="space-y-4">
               {paidFlowOutcome && paidFlowOutcome.state !== "confirmed" ? (
-                <div className="rounded-md border border-blue-200 bg-blue-50 p-3">
+                <div className="rounded-md border border-blue-200 bg-blue-50 p-3" ref={paidFlowOutcomeRef} tabIndex={-1}>
                   <p className="text-sm font-medium text-blue-900">Recovered Payment</p>
                   <p className="mt-1 text-xs text-blue-800">
                     An interrupted payment for this resource was recovered. State: {paidFlowOutcome.state}
@@ -667,7 +715,7 @@ function DemoPaymentPlayground() {
               </div>
 
               {preflightError ? (
-                <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3" ref={preflightErrorRef} role="alert" tabIndex={-1}>
                   <div className="flex items-start gap-2">
                     <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 text-amber-700" />
                     <div className="flex-1">
@@ -802,7 +850,7 @@ function DemoPaymentPlayground() {
               ) : null}
 
               {error ? (
-                <div className={`rounded-md border p-3 ${error.retryable ? "border-amber-200 bg-amber-50" : "border-red-200 bg-red-50"}`}>
+                <div className={`rounded-md border p-3 ${error.retryable ? "border-amber-200 bg-amber-50" : "border-red-200 bg-red-50"}`} ref={errorRegionRef} role="alert" tabIndex={-1}>
                   <div className="flex items-start gap-2">
                     <AlertTriangle aria-hidden="true" className={`mt-0.5 h-4 w-4 ${error.retryable ? "text-amber-700" : "text-red-700"}`} />
                     <div className="flex-1">
@@ -880,7 +928,7 @@ function ResultPanel({
   tone: "success" | "warning" | "danger";
 }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-3" role="status">
       <div className="mb-3 flex items-center justify-between gap-2">
         <p className="text-sm font-semibold text-slate-950">{label}</p>
         <div className="flex items-center gap-2">

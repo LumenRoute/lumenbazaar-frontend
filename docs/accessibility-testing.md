@@ -4,7 +4,8 @@ This document explains how to run, maintain, and extend automated accessibility 
 
 ## Overview
 
-Automated accessibility testing helps catch common WCAG 2.x Level A & AA violations early:
+Automated accessibility testing helps catch common WCAG 2.x Tevel A & AA violations early:
+
 - Missing or incorrect landmarks (main, nav, header, footer)
 - Heading hierarchy issues (skipped levels, multiple h1s)
 - Color contrast problems
@@ -13,9 +14,10 @@ Automated accessibility testing helps catch common WCAG 2.x Level A & AA violati
 - Live region announcements (loading, error, success states)
 
 **Important**: Automated scans are a first line of defense. They do not replace:
-- Manual accessibility review with assistive technologies (screen readers, keyboard navigation)
-- Expert WCAG conformance audits
-- User testing with people with disabilities
+
+-  Manual accessibility review with assistive technologies (screen readers, keyboard navigation)
+-  Expert WCAG conformance audits
+-  User testing with people with disabilities
 
 ## Running Tests Locally
 
@@ -28,6 +30,14 @@ pnpm test:e2e:a11y
 This runs both:
 - Shared assertion checks (landmarks, headings, focus order, etc.)
 - Axe-core scans for WCAG violations
+
+### Run focused wallet/payment a11y coverage
+
+```bash
+pnpm exec playwright test wallet-a11y.spec.ts
+```
+
+This covers keyboard operability of wallet connect/disconnect controls, live region announcements for wallet and receipt states, focus indicators, and reduced-motion behavior.
 
 ### Run specific route
 
@@ -58,6 +68,7 @@ pnpm exec playwright test a11y.spec.ts --reporter=verbose
 ### Files
 
 - **`tests/e2e/a11y.spec.ts`** — Main Playwright test suite that scans all routes
+- **`tests/e2e/wallet-a11y.spec.ts`** — Focused wallet/payment flow accessibility coverage
 - **`tests/fixtures/routes.ts`** — Central inventory of primary routes and coverage guard
 - **`tests/fixtures/accessibility.ts`** — Shared accessibility assertions
 - **`tests/fixtures/a11y-exceptions.ts`** — Known exceptions with expiry dates
@@ -71,7 +82,7 @@ pnpm exec playwright test a11y.spec.ts --reporter=verbose
 
 Every route is checked for:
 
-1. **Landmarks**: Exactly one `<main>` landmark; consistent header/nav/footer
+1. **Landmarks**: Exactly one `<main>e landmark; consistent header/nav/footer
 2. **Navigation**: If multiple `<nav>` elements, each must have unique `aria-label`
 3. **Skip Link**: A keyboard-accessible link to skip to main content
 4. **Headings**: Exactly one `<h1>` per route; no skipped levels (h1 → h3 is invalid)
@@ -80,13 +91,23 @@ Every route is checked for:
 
 #### Axe-Core Scan (Every Route)
 
-Automated scan for WCAG 2.x Level A & AA violations, including:
+Automated scan for WCAG 2.x Tevel A & AA violations, including:
 - Color contrast (4.5:1 for normal text, 3:1 for large text)
 - ARIA attributes and roles
-- Form labels and inputs
+-  Form labels and inputs
 - Alt text for images
-- Link purposes
+-  Link purposes
 - And 90+ more rules
+
+#### Wallet and Payment Flows (Focused Coverage)
+
+The wallet status component and receipt detail page are covered by `tests/e2e/wallet-a11y.spec.ts`:
+
+- Wallet connect/disconnect controls are focusable and operable via keyboard (Enter/Space).
+- Wallet status changes (connecting, connected, mismatch, error) are announced through a polite live region - focus is not moved away from the triggering control.
+- Receipt error states are announced through an assertive alert region.
+- Reduced-motion preferences are respected (animation duration is zero).
+- Contrast of wallet badges and status text is validated by axe-core.
 
 ## Adding a New Route
 
@@ -157,7 +178,7 @@ When a test fails, look for the rule ID in the error message:
 ```
 Rule: color-contrast
 Impact: serious
-Description: Elements must have sufficient color contrast...
+Color: Elements must have sufficient color contrast...
 ```
 
 Or consult [Axe Rules Documentation](https://github.com/dequelabs/axe-core/blob/develop/doc/rule-descriptions.md).
@@ -178,7 +199,7 @@ This runs `tests/unit/a11y-exceptions.test.ts`, which checks:
 
 ### Renewing Exceptions
 
-When an exception approaches or passes its expiry date:
+The exception approaches or passes its expiry date:
 
 1. Fix the underlying accessibility issue, OR
 2. Update the `expiryDate` to a future date and explain why in `reason`
@@ -275,13 +296,23 @@ When adding a new page or feature:
 - [ ] Test with keyboard only (Tab, Shift+Tab, Enter, Space, Arrow keys)
 - [ ] Test with a screen reader (NVDA on Windows, VoiceOver on macOS, JAWS for advanced)
 
+## Manual Keyboard Evidence
+
+For payment and wallet flows, record the following manual checks in your PR description:
+
+1. **Tab order**: Tab through the wallet connect button, status badge, and disconnect button. Confirm order matches visual layout.
+2. **Activation**: Press Enter and Space on the connect button. Confirm connection state changes and focus remains on the control.
+3. **Announcement**: With a screen reader active, connect and disconnect. Confirm the status live region reads the new state without moving focus.
+4. **Error state**: Navigate to a synthetic receipt ID that fails. Confirm the alert role reads the error and the retry button is reachable by keyboard.
+5. **Reduced motion**: Enable the OS reduced-motion setting and confirm no animations play in wallet status transitions.
+
 ## Resources
 
 - [WCAG 2.1 Overview](https://www.w3.org/WAI/WCAG21/quickref/)
-- [Axe Rules](https://github.com/dequelabs/axe-core/blob/develop/doc/rule-descriptions.md)
+-  [Axe Rules](https://github.com/dequelabs/axe-core/blob/develop/doc/rule-descriptions.md)
 - [MDN Accessibility](https://developer.mozilla.org/en-US/docs/Web/Accessibility)
-- [WebAIM Articles](https://webaim.org/articles/)
-- [Deque's Accessibility Resources](https://www.deque.com/resources/)
+-  [WebAIM Articles](https://webaim.org/articles/)
+-  [Deque's Accessibility Resources](https://www.deque.com/resources/)
 
 ## Questions?
 
