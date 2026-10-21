@@ -1,23 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  assetMetadataSchema,
-  type AssetMetadata
-} from "@/services/api/schemas";
+import { assetMetadataSchema, type AssetMetadata } from "@/services/api/schemas";
 import {
   getNetworkConfig,
-  getStableNetworkIds,
+  networkLabel,
+  resolveNetworkId,
   stellarNetworks,
   type NetworkId
 } from "./networks";
 
 describe("networks config", () => {
   describe("stellarNetworks", () => {
-    it("includes testnet and pubnet", () => {
-      expect(Object.keys(stellarNetworks).sort()).toEqual([
-        "stellar:pubnet",
-        "stellar:testnet"
-      ]);
+    it("includes both testnet and pubnet", () => {
+      expect(Object.keys(stellarNetworks).sort()).toEqual(["stellar:pubnet", "stellar:testnet"]);
     });
 
     it("each network has required properties", () => {
@@ -200,6 +195,44 @@ describe("networks config", () => {
       const config = getNetworkConfig("stellar:pubnet");
       expect(config.id).toBe("stellar:pubnet");
       expect(config.assets).toBeDefined();
+    });
+  });
+
+  describe("resolveNetworkId", () => {
+    it("resolves the testnet passphrase", () => {
+      expect(resolveNetworkId(getNetworkConfig("stellar:testnet").passphrase)).toBe(
+        "stellar:testnet"
+      );
+    });
+
+    it("resolves the pubnet passphrase", () => {
+      expect(resolveNetworkId(getNetworkConfig("stellar:pubnet").passphrase)).toBe(
+        "stellar:pubnet"
+      );
+    });
+
+    it("returns undefined for a passphrase that is not configured", () => {
+      expect(resolveNetworkId("Some Other Network ; January 2024")).toBeUndefined();
+    });
+
+    it("returns undefined for a missing passphrase", () => {
+      expect(resolveNetworkId(undefined)).toBeUndefined();
+    });
+
+    it("returns undefined for an empty passphrase", () => {
+      expect(resolveNetworkId("")).toBeUndefined();
+      expect(resolveNetworkId("   ")).toBeUndefined();
+    });
+  });
+
+  describe("networkLabel", () => {
+    it("labels configured networks", () => {
+      expect(networkLabel("stellar:testnet")).toBe(getNetworkConfig("stellar:testnet").label);
+      expect(networkLabel("stellar:pubnet")).toBe(getNetworkConfig("stellar:pubnet").label);
+    });
+
+    it("labels unknown networks honestly", () => {
+      expect(networkLabel(undefined)).toBe("Unknown network");
     });
   });
 });

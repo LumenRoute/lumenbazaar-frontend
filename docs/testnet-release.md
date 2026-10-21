@@ -113,6 +113,7 @@ Generated screenshots capture these deterministic states:
 ### Browser Variants
 
 Screenshots are captured for:
+
 - **Desktop** - Chrome 1920x1080
 - **Mobile** - Pixel 7 (mobile viewport)
 
@@ -125,6 +126,7 @@ Screenshot artifacts follow this deterministic naming pattern:
 ```
 
 Example:
+
 ```
 test-results/screenshots/
 ├── desktop/
@@ -165,6 +167,7 @@ gh workflow run release-screenshots.yml \
 ```
 
 The workflow:
+
 1. Checks out the commit
 2. Captures desktop and mobile screenshots
 3. Organizes artifacts with commit hash and timestamp
@@ -175,6 +178,7 @@ The workflow:
 8. Generates release evidence report
 
 Artifacts are available in the workflow run:
+
 - `release-screenshots-{COMMIT}-{DATE}` - Organized screenshot directory
 - `release-screenshots-archive-{COMMIT}-{DATE}` - Compressed tar.gz
 - `release-evidence-report-{COMMIT}-{DATE}` - Markdown evidence summary
@@ -212,12 +216,14 @@ Use this metadata when documenting release evidence in pull requests or release 
 Screenshots are deterministic and reproducible from any clean clone:
 
 1. Checkout the release commit:
+
    ```bash
    git checkout <commit-hash>
    git clean -fd
    ```
 
 2. Generate screenshots:
+
    ```bash
    pnpm screenshots:release
    ```
@@ -251,6 +257,7 @@ backend API. The test:
 - Captures frontend and backend commit identifiers for evidence
 
 If the test fails, check:
+
 1. `NEXT_PUBLIC_LUMENBAZAAR_API_URL` is set correctly on Vercel
 2. Backend API is deployed and accessible
 3. CORS headers permit requests from the frontend domain
@@ -267,9 +274,12 @@ The connectivity test runs on both desktop and mobile browsers.
    countdown appears and that the amber warning banner shows at or below 30 seconds remaining.
 3. Connect a fresh Freighter testnet wallet, authorize once, and reject any prompt whose account,
    network, or terms differ from the reviewed values.
-4. Submit the paid request once. Confirm the UI progresses through verification, paid resource call,
+4. Connect a wallet that is on another Stellar network and confirm the header shows the wrong-network
+   recovery panel with the expected and the current network, that payment authorization is refused
+   with `WALLET_NETWORK_MISMATCH`, and that the recovery actions are reachable with the keyboard.
+5. Submit the paid request once. Confirm the UI progresses through verification, paid resource call,
    settlement submission, and final receipt without requiring a second authorization.
-5. Open the Stellar transaction link, compare its hash with the receipt, reload the frontend, and
+6. Open the Stellar transaction link, compare its hash with the receipt, reload the frontend, and
    confirm the same receipt is recovered. Record the UTC time, frontend/backend commits, resource ID,
    receipt ID, transaction hash, and result in the release evidence.
 
@@ -280,6 +290,7 @@ The connectivity test runs on both desktop and mobile browsers.
 LumenBazaar frontend collects operational telemetry **only when explicitly enabled** via the `NEXT_PUBLIC_ENABLE_TELEMETRY` environment variable.
 
 **What Is Collected (when enabled):**
+
 - Event type and timestamp
 - Session ID (opaque, random, non-wallet-specific)
 - Network ID (stellar:testnet or stellar:pubnet)
@@ -292,6 +303,7 @@ LumenBazaar frontend collects operational telemetry **only when explicitly enabl
   - Asset codes (alphanumeric, max 12 characters)
 
 **What Is NEVER Collected:**
+
 - Wallet addresses or accounts
 - Private keys, seed phrases, or any cryptographic material
 - Payment signatures or signed XDR
@@ -302,6 +314,7 @@ LumenBazaar frontend collects operational telemetry **only when explicitly enabl
 - Any nested or encoded sensitive data
 
 **Validation and Redaction:**
+
 1. Only allowlisted fields per event type are extracted
 2. All collected fields are validated against strict bounds (enums, integer ranges, string patterns)
 3. Two-layer defense: allowlist validation + pattern detection for sensitive data
@@ -332,6 +345,7 @@ NEXT_PUBLIC_ENABLE_TELEMETRY=false
 **Sink Interface:**
 
 The telemetry service uses a replaceable sink interface:
+
 - `NoOpSink` (default when disabled): silently discards events
 - `ConsoleSink` (development): logs events to console with `[Telemetry]` prefix
 - Future sinks (e.g., `RemoteSink`) can be added without changing the telemetry API
@@ -368,6 +382,9 @@ is never allowed. HSTS is emitted only when `NODE_ENV=production`.
 - The backend contract does not expose payment-attempt or seller-payment collection endpoints, so
   those live pages report the capability as unavailable instead of displaying fixtures.
 - Mainnet is disabled. No testnet result is evidence of mainnet readiness.
+- The Freighter API does not expose a programmatic network switch, so the wrong-network recovery
+  panel asks the user to switch inside the wallet and then re-checks the wallet. See
+  [wallet-network-recovery.md](wallet-network-recovery.md).
 - `upto` capped sessions remain disabled until backend and contract releases advertise support.
 - The deterministic browser gate does not create a cryptographic signature or Stellar transaction;
   only `pnpm test:e2e:live` plus explorer evidence proves that path.

@@ -3,12 +3,16 @@ import { PaymentPayloadV2Schema } from "@x402/core/schemas";
 import type { PaymentPayload, PaymentRequirements } from "@x402/core/types";
 import { ExactStellarScheme, type ClientStellarSigner } from "@x402/stellar";
 
-import { getNetworkConfig } from "@/config/networks";
+import { getNetworkConfig, type NetworkId } from "@/config/networks";
 import {
   paymentPayloadV2Schema,
   type PaymentPayload as LumenPaymentPayload
 } from "@/services/api/schemas";
-import { connectFreighterWallet, type WalletConnectionState } from "@/services/wallets";
+import {
+  connectFreighterWallet,
+  describeWalletNetwork,
+  type WalletConnectionState
+} from "@/services/wallets";
 
 import { assertChallengeFresh, type ValidatedPaymentChallenge } from "./challenge";
 
@@ -105,7 +109,9 @@ export async function authorizePaymentChallenge(
   const now = dependencies.now ?? Date.now;
   const signingTimeoutMs = dependencies.signingTimeoutMs ?? 5 * 60 * 1000; // 5 minutes default
   assertFreshForAuthorization(challenge, now());
-  if (challenge.requirement.network !== "stellar:testnet") {
+
+  const paymentNetwork = challenge.requirement.network;
+  if (paymentNetwork !== "stellar:testnet") {
     throw new AuthorizationError(
       "WALLET_NETWORK_MISMATCH",
       "Wallet authorization is enabled only for the selected Stellar testnet."
@@ -113,11 +119,18 @@ export async function authorizePaymentChallenge(
   }
 
   const connectWallet = dependencies.connectWallet ?? connectFreighterWallet;
-  const connection = await connectWallet("stellar:testnet");
-  const account = requireConnectedAccount(connection);
+  const connection = await connectWallet(paymentNetwork);
+  const account = requireConnectedAccount(connection, paymentNetwork);
   const walletApi = dependencies.walletApi ?? (await loadFreighterApi());
-  const signer = createFreighterSigner(walletApi, account, challenge, now, signingTimeoutMs);
-  const network = getNetworkConfig("stellar:testnet");
+  const signer = createFreighterSigner(
+    walletApi,
+    account,
+    challenge,
+    now,
+    signingTimeoutMs,
+    paymentNetwork
+  );
+  const network = getNetworkConfig(paymentNetwork);
   const createScheme =
     dependencies.createScheme ??
     ((clientSigner: ClientStellarSigner, rpcUrl: string) =>
@@ -161,15 +174,16 @@ function createFreighterSigner(
   expectedAccount: string,
   challenge: ValidatedPaymentChallenge,
   now: () => number,
-  signingTimeoutMs: number
+  signingTimeoutMs: number,
+  paymentNetwork: NetworkId
 ): ClientStellarSigner {
-  const expectedPassphrase = getNetworkConfig("stellar:testnet").passphrase;
+  const expectedPassphrase = getNetworkConfig(paymentNetwork).passphrase;
 
   return {
     address: expectedAccount,
     async signAuthEntry(entryXdr, options) {
       assertFreshForAuthorization(challenge, now());
-      
+
       // Create timeout promise
       const timeoutPromise = new Promise<never>((_resolve, reject) => {
         setTimeout(() => {
@@ -184,7 +198,16 @@ function createFreighterSigner(
 
       try {
         const result = await Promise.race([
-          signWithWallet(walletApi, expectedAccount, expectedPassphrase, entryXdr, options, challenge, now),
+          signWithWallet(
+            walletApi,
+            expectedAccount,
+            expectedPassphrase,
+            entryXdr,
+            options,
+            challenge,
+            now,
+            paymentNetwork
+          ),
           timeoutPromise
         ]);
         return result;
@@ -208,7 +231,8 @@ async function signWithWallet(
   entryXdr: string,
   options: { networkPassphrase?: string } | undefined,
   challenge: ValidatedPaymentChallenge,
-  now: () => number
+  now: () => number,
+  paymentNetwork: NetworkId
 ) {
   const [addressResult, networkResult] = await Promise.all([
     walletApi.getAddress(),
@@ -229,12 +253,11 @@ async function signWithWallet(
   if (
     networkResult.error !== undefined ||
     networkResult.networkPassphrase !== expectedPassphrase ||
-    (options?.networkPassphrase !== undefined &&
-      options.networkPassphrase !== expectedPassphrase)
+    (options?.networkPassphrase !== undefined && options.networkPassphrase !== expectedPassphrase)
   ) {
     throw new AuthorizationError(
       "WALLET_NETWORK_MISMATCH",
-      "Freighter must be connected to Stellar testnet before authorization."
+      `Freighter must be on ${getNetworkConfig(paymentNetwork).label} before authorization.`
     );
   }
 
@@ -267,11 +290,27 @@ async function signWithWallet(
   };
 }
 
-function requireConnectedAccount(connection: WalletConnectionState) {
+/**
+ * Requires a connected wallet that is verifiably on the network the payment
+ * is denominated in.
+ *
+ * A wallet on a different network and a wallet that does not report a network
+ * at all are both blocked: an unverifiable network cannot be treated as the
+ * expected one.
+ */
+function requireConnectedAccount(connection: WalletConnectionState, paymentNetwork: NetworkId) {
+  const expected = getNetworkConfig(paymentNetwork).label;
+
   if (connection.status === "mismatch") {
     throw new AuthorizationError(
       "WALLET_NETWORK_MISMATCH",
-      "Freighter must be connected to Stellar testnet before authorization."
+      `The wallet is on ${describeWalletNetwork(connection)} but this payment requires ${expected}.`
+    );
+  }
+  if (connection.status === "network_unknown") {
+    throw new AuthorizationError(
+      "WALLET_NETWORK_MISMATCH",
+      `The wallet did not report a network, so it cannot be confirmed to be on ${expected}.`
     );
   }
   if (connection.status === "disconnected") {
