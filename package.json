@@ -17,6 +17,9 @@
     "test:e2e:smoke": "playwright test",
     "test:watch": "vitest",
     "audit:prod": "node scripts/audit-production.mjs",
+    "security:install-hooks": "git config core.hooksPath .githooks",
+    "security:malware-scan": "node scripts/security/scan-malware.mjs",
+    "security:malware-test": "node --test scripts/security/scan-malware.fixtures.mjs",
     "format:check": "prettier --check .",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
