@@ -533,6 +533,29 @@ Completion check:
 
 - Mainnet UI does not hide network, asset, amount, recipient, or transaction details.
 
+## Phase 37A: MCP Response Viewer With Redaction ✓
+
+Parts:
+
+- Build `McpResponseViewer` component with structured response rendering. ✓
+- Add automatic redaction of sensitive payment data before display. ✓
+- Implement size limits to prevent page freezes on large responses. ✓
+- Add expandable sections for preview/full content switching. ✓
+- Build safe copy-to-clipboard with redaction applied. ✓
+- Implement error isolation for malformed responses. ✓
+- Create export utilities for response formatting and validation. ✓
+- Add comprehensive unit tests for redaction and formatting. ✓
+- Add Playwright E2E tests for desktop and mobile behavior. ✓
+
+Completion check:
+
+- Large responses are bounded without page freeze
+- Redaction runs before display and copy
+- Malformed responses have isolated error state
+- Copy operations safely redact sensitive data before clipboard
+- Component works on desktop and mobile viewports
+- All tests pass with focused Vitest and Playwright coverage
+
 ## Phase 38: Maintenance
 
 Parts:

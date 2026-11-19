@@ -1,12 +1,23 @@
 import { ExternalLink } from "lucide-react";
 
+import { DocsSearch } from "@/components/docs/docs-search";
 import { PageHeader } from "@/components/layout/page-header";
 import { McpToolInspector } from "@/components/mcp/mcp-tool-inspector";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { SearchResult } from "@/services/docs-search";
 import { canonicalDocsRepo, docsLinks } from "@/services/docs-links";
 
 export function DocsIndex() {
+  const handleSearchSelect = (result: SearchResult) => {
+    // Log search selection for analytics (optional)
+    console.debug("Documentation search result selected:", {
+      label: result.entry.label,
+      category: result.entry.category,
+      score: result.score,
+    });
+  };
+
   return (
     <>
       <PageHeader
@@ -15,6 +26,13 @@ export function DocsIndex() {
       />
 
       <div className="space-y-6">
+        {/* Search Component */}
+        <Card>
+          <CardBody className="p-4">
+            <DocsSearch onResultSelect={handleSearchSelect} />
+          </CardBody>
+        </Card>
+
         <Card>
           <CardHeader>
             <h2 className="text-lg font-semibold text-slate-950">Canonical source</h2>
