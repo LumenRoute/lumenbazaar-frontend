@@ -34,6 +34,9 @@ truth, so a copied link, a bookmark, or browser history always reproduces the sa
 - Results are cached by query key (`staleTime` 30s), so history navigation re-renders cached
   results instead of issuing duplicate discovery requests.
 - Wallet, seller-session, and payment-authorization state is intentionally **not** serialized.
+- Named searches can be saved locally and re-applied through these same canonical parameters.
+  Saved searches never store the cursor and are never synced; see
+  [Saved discovery searches](./saved-discovery-searches.md).
 - Invalid URL values are normalized on the server before rendering, so the client and server agree
   on the request that is made.
 
