@@ -29,11 +29,13 @@ import { ResourceWizardSnippets } from "./resource-wizard-snippets";
 import { ResourceWizardPublish } from "./resource-wizard-publish";
 import {
   createEmptyDraft,
-  loadDraftFromStorage,
+  formatDraftAge,
+  loadDraftRecoveryFromStorage,
   saveDraftToStorage,
   updateDraft,
   clearDraftFromStorage,
-  type ResourceDraft
+  type ResourceDraft,
+  type ResourceDraftRecovery
 } from "@/services/resource-creation";
 
 export type WizardStep = "basic-info" | "pricing" | "metadata" | "snippets" | "review" | "publish";
@@ -69,6 +71,10 @@ export function ResourceWizard({ onCancel, onPublish, resourceId, sellerId }: Re
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [baseline, setBaseline] = useState<ResourceDraft | null>(null);
   const [draftNotice, setDraftNotice] = useState<string | undefined>(undefined);
+  const [recovery, setRecovery] = useState<Pick<
+    ResourceDraftRecovery,
+    "savedAt" | "schemaVersion"
+  > | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const steps = resourceId === undefined ? CREATE_STEPS : EDIT_STEPS;
   const dirty = draft !== null && hasMeaningfulDraftChanges(draft, baseline);
@@ -102,14 +108,17 @@ export function ResourceWizard({ onCancel, onPublish, resourceId, sellerId }: Re
     };
   }, [resourceId]);
 
-  // Load a new-resource draft from storage on mount.
+  // Load a new-resource draft from storage on mount and surface an explicit
+  // recovery prompt with its age and storage schema version.
   useEffect(() => {
     if (resourceId !== undefined) return;
-    const stored = loadDraftFromStorage();
+    const stored = loadDraftRecoveryFromStorage();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDraft(stored || createEmptyDraft());
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDraft(stored?.draft ?? createEmptyDraft());
     setBaseline(createEmptyDraft());
+    setRecovery(
+      stored === null ? null : { savedAt: stored.savedAt, schemaVersion: stored.schemaVersion }
+    );
   }, [resourceId]);
 
   // Auto-save the draft to the matching storage scope whenever it changes.
@@ -176,6 +185,7 @@ export function ResourceWizard({ onCancel, onPublish, resourceId, sellerId }: Re
   }
 
   function handleDiscard() {
+    setRecovery(null);
     const empty = createEmptyDraft();
 
     if (resourceId === undefined) {
@@ -225,8 +235,9 @@ export function ResourceWizard({ onCancel, onPublish, resourceId, sellerId }: Re
     try {
       if (draft) {
         onPublish?.(draft);
-        // Clear draft after successful publish
+        // Successful publish removes the local draft; discard does the same.
         clearDraftFromStorage();
+        setRecovery(null);
       }
     } finally {
       setIsLoading(false);
@@ -272,6 +283,26 @@ export function ResourceWizard({ onCancel, onPublish, resourceId, sellerId }: Re
         <h1 className="text-2xl font-bold text-slate-950">{steps[currentStepIndex]?.label}</h1>
         <p className="mt-1 text-slate-600">{steps[currentStepIndex]?.description}</p>
       </div>
+
+      {recovery !== null ? (
+        <div
+          className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+          role="status"
+        >
+          <p className="text-sm text-amber-900">
+            Recovered an autosaved draft from {formatDraftAge(recovery.savedAt)} ago (schema v
+            {recovery.schemaVersion}). Review it, or discard it to start clean.
+          </p>
+          <div className="flex gap-2">
+            <Button onClick={() => setRecovery(null)} type="button" variant="secondary">
+              Keep editing
+            </Button>
+            <Button onClick={handleDiscard} type="button" variant="ghost">
+              Discard recovered draft
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {/* Step content */}
       <div className="min-h-96 space-y-6">

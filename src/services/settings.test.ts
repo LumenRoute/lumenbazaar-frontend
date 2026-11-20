@@ -3,8 +3,11 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   defaultFrontendSettings,
   frontendSettingsSchema,
+  loadDiscoveryDensity,
   loadFrontendSettings,
+  resetDiscoveryDensity,
   resetFrontendSettings,
+  saveDiscoveryDensity,
   saveFrontendSettings,
   type FrontendSettings
 } from "./settings";
@@ -322,10 +325,7 @@ describe("Frontend Settings", () => {
         localeCode: "ja-JP"
       };
 
-      mockStorage.setItem(
-        "lumenbazaar.frontend.settings.v1",
-        JSON.stringify(partialSettings)
-      );
+      mockStorage.setItem("lumenbazaar.frontend.settings.v1", JSON.stringify(partialSettings));
 
       const loaded = loadFrontendSettings(mockStorage);
 
@@ -338,10 +338,7 @@ describe("Frontend Settings", () => {
     });
 
     it("returns defaults for invalid stored settings", () => {
-      mockStorage.setItem(
-        "lumenbazaar.frontend.settings.v1",
-        '{"invalid": "settings"}'
-      );
+      mockStorage.setItem("lumenbazaar.frontend.settings.v1", '{"invalid": "settings"}');
 
       const loaded = loadFrontendSettings(mockStorage);
       const defaults = defaultFrontendSettings();
@@ -350,10 +347,7 @@ describe("Frontend Settings", () => {
     });
 
     it("returns defaults for malformed JSON", () => {
-      mockStorage.setItem(
-        "lumenbazaar.frontend.settings.v1",
-        "not valid json"
-      );
+      mockStorage.setItem("lumenbazaar.frontend.settings.v1", "not valid json");
 
       const loaded = loadFrontendSettings(mockStorage);
       const defaults = defaultFrontendSettings();
@@ -406,7 +400,7 @@ describe("Frontend Settings", () => {
   describe("Settings persistence workflow", () => {
     it("supports full settings update workflow", () => {
       // Start with defaults
-      let settings = loadFrontendSettings(mockStorage);
+      const settings = loadFrontendSettings(mockStorage);
       expect(settings.timezoneId).toBe(defaultFrontendSettings().timezoneId);
 
       // Update settings
@@ -459,6 +453,30 @@ describe("Frontend Settings", () => {
 
       const loaded = loadFrontendSettings(mockStorage);
       expect(loaded.localeCode).toBe(defaultFrontendSettings().localeCode);
+    });
+  });
+
+  describe("Discovery density", () => {
+    it("defaults to comfortable", () => {
+      expect(loadDiscoveryDensity(mockStorage)).toBe("comfortable");
+    });
+
+    it("persists only supported densities", () => {
+      saveDiscoveryDensity("compact", mockStorage);
+
+      expect(loadDiscoveryDensity(mockStorage)).toBe("compact");
+    });
+
+    it("falls back for unsupported or invalid stored values", () => {
+      mockStorage.setItem("lumenbazaar.frontend.discovery-density.v1", "dense");
+      expect(loadDiscoveryDensity(mockStorage)).toBe("comfortable");
+    });
+
+    it("resets to the default", () => {
+      saveDiscoveryDensity("compact", mockStorage);
+
+      expect(resetDiscoveryDensity(mockStorage)).toBe("comfortable");
+      expect(loadDiscoveryDensity(mockStorage)).toBe("comfortable");
     });
   });
 });

@@ -1,13 +1,18 @@
 "use client";
 
 import { AlertCircle, CheckCircle2, AlertTriangle, Loader } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { apiClient } from "@/services/api/client";
-import { type ResourceDraft } from "@/services/resource-creation";
-import type { CreateResourceInput, ResourceValidationResult } from "@/services/api/schemas";
+import {
+  RESOURCE_PUBLISH_OMITTED_FIELDS,
+  RESOURCE_PUBLISH_PUBLIC_FIELDS,
+  buildResourcePublishPayload,
+  type ResourceDraft
+} from "@/services/resource-creation";
+import type { ResourceValidationResult } from "@/services/api/schemas";
 
 import { useSellerSession } from "./seller-session-provider";
 
@@ -33,19 +38,30 @@ export function ResourceWizardPublish({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // Validate resource on mount
+  // The preview and every request read this one normalized payload, so what a
+  // seller reviews is exactly what validation and publish receive.
+  const payload = useMemo(() => {
+    try {
+      return buildResourcePublishPayload(draft, sellerId);
+    } catch {
+      return null;
+    }
+  }, [draft, sellerId]);
+
+  // Validate the exact payload shown in the preview.
   useEffect(() => {
     async function validate() {
-      if (!sellerId || !draft.name || !draft.network || !draft.assetCode || !draft.payTo) {
+      if (payload === null) {
         setError("Resource is incomplete. Please review all required fields.");
         return;
       }
 
       setValidating(true);
       setError(null);
+      setValidationResult(null);
 
       try {
-        const result = await apiClient.validateResource(buildResourceInput(draft, sellerId));
+        const result = await apiClient.validateResource(payload);
 
         setValidationResult(result);
       } catch (err) {
@@ -62,9 +78,14 @@ export function ResourceWizardPublish({
     }
 
     validate();
-  }, [draft, sellerId]);
+  }, [payload]);
 
   async function handlePublish() {
+    if (payload === null) {
+      setError("Resource is incomplete. Please fix errors before publishing.");
+      return;
+    }
+
     if (!validationResult?.valid) {
       setError("Resource validation failed. Please fix errors before publishing.");
       return;
@@ -74,7 +95,7 @@ export function ResourceWizardPublish({
     setError(null);
 
     try {
-      await apiClient.createResource(buildResourceInput(draft, sellerId));
+      await apiClient.createResource(payload);
 
       setSuccess(true);
       onPublish?.();
@@ -210,29 +231,43 @@ export function ResourceWizardPublish({
             </div>
           )}
 
-          {/* Resource Summary */}
+          {/* Read-only preview of the exact payload that publish submits. */}
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-medium text-slate-700">Resource summary</p>
-            <div className="mt-3 grid gap-2 text-xs text-slate-600 md:grid-cols-2">
-              <div>
-                <p className="font-medium text-slate-700">{draft.name}</p>
-                <p className="text-slate-500">{draft.description.substring(0, 50)}...</p>
-              </div>
-              <div>
-                <p className="font-medium text-slate-700">
-                  {draft.amount} {draft.assetCode}
+            <p className="text-sm font-medium text-slate-700">Publish preview</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Read-only view of the exact normalized metadata that becomes public on submit.
+            </p>
+            {payload === null ? (
+              <p className="mt-3 text-xs text-red-700">
+                Preview appears once every required publish field is valid.
+              </p>
+            ) : (
+              <>
+                <dl className="mt-3 grid gap-3 text-xs md:grid-cols-2">
+                  {RESOURCE_PUBLISH_PUBLIC_FIELDS.map((field) => (
+                    <div
+                      className={
+                        field === "description" ||
+                        field === "inputSchema" ||
+                        field === "outputSchema"
+                          ? "md:col-span-2"
+                          : undefined
+                      }
+                      key={field}
+                    >
+                      <dt className="font-medium text-slate-700">{publishFieldLabels[field]}</dt>
+                      <dd className="mt-1 break-words text-slate-600">
+                        {formatPreviewValue(payload[field])}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="mt-3 text-xs text-slate-500">
+                  Not submitted: {RESOURCE_PUBLISH_OMITTED_FIELDS.join(", ")} (local draft
+                  bookkeeping only).
                 </p>
-                <p className="text-slate-500">{draft.network}</p>
-              </div>
-              <div>
-                <p className="font-medium text-slate-700">{draft.url}</p>
-                <p className="text-slate-500">Endpoint</p>
-              </div>
-              <div>
-                <p className="font-medium text-slate-700">{draft.routeTemplate}</p>
-                <p className="text-slate-500">Route</p>
-              </div>
-            </div>
+              </>
+            )}
           </div>
         </CardBody>
       </Card>
@@ -260,6 +295,7 @@ export function ResourceWizardPublish({
               onClick={handlePublish}
               disabled={
                 !canMutate ||
+                payload === null ||
                 !validationResult?.valid ||
                 publishing ||
                 validating ||
@@ -277,21 +313,31 @@ export function ResourceWizardPublish({
   );
 }
 
-function buildResourceInput(draft: ResourceDraft, sellerId: string): CreateResourceInput {
-  return {
-    sellerId,
-    name: draft.name,
-    description: draft.description,
-    type: draft.type,
-    url: draft.url,
-    routeTemplate: draft.routeTemplate,
-    network: draft.network || "stellar:testnet",
-    assetCode: draft.assetCode || "USDC",
-    assetIssuer: draft.assetIssuer || "",
-    amount: draft.amount || "0",
-    payTo: draft.payTo || "",
-    inputSchema: draft.inputSchema || { type: "object", properties: {} },
-    outputSchema: draft.outputSchema || { type: "object", properties: {} },
-    ...(draft.extensions === undefined ? {} : { extensions: draft.extensions })
-  };
+const publishFieldLabels: Record<(typeof RESOURCE_PUBLISH_PUBLIC_FIELDS)[number], string> = {
+  amount: "Amount",
+  assetCode: "Asset code",
+  assetIssuer: "Asset issuer",
+  description: "Description",
+  extensions: "Extensions",
+  inputSchema: "Input schema",
+  name: "Name",
+  network: "Network",
+  outputSchema: "Output schema",
+  payTo: "Pay to",
+  routeTemplate: "Route template",
+  sellerId: "Seller ID",
+  type: "Type",
+  url: "URL"
+};
+
+function formatPreviewValue(value: unknown): string {
+  if (value === undefined || value === null || value === "") {
+    return "Not included";
+  }
+
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
 }

@@ -51,9 +51,22 @@ export function DashboardMetrics() {
 
   if (snapshot === undefined) {
     return (
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div
+        aria-label="Loading dashboard metrics"
+        className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+        role="status"
+      >
+        <span className="sr-only">Loading dashboard metrics</span>
         {metrics.map((metric) => (
-          <Card key={metric.key} className="h-36 animate-pulse bg-white" />
+          <Card aria-hidden="true" className="h-36" key={metric.key}>
+            <CardHeader className="flex flex-row items-center justify-between gap-3">
+              <div className="h-4 w-28 animate-pulse rounded-sm bg-slate-200" />
+              <div className="h-5 w-5 animate-pulse rounded-sm bg-slate-100" />
+            </CardHeader>
+            <CardBody>
+              <div className="h-8 w-20 animate-pulse rounded-sm bg-slate-200" />
+            </CardBody>
+          </Card>
         ))}
       </div>
     );

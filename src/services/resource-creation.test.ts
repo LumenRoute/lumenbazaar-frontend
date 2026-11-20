@@ -8,6 +8,11 @@ import {
   saveDraftToStorage,
   loadDraftFromStorage,
   clearDraftFromStorage,
+  buildResourcePublishPayload,
+  formatDraftAge,
+  loadDraftRecoveryFromStorage,
+  RESOURCE_DRAFT_STORAGE_VERSION,
+  RESOURCE_PUBLISH_OMITTED_FIELDS,
   exportResourceDraftToJson,
   importResourceDraftFromJson,
   MAX_RESOURCE_DRAFT_IMPORT_BYTES,
@@ -195,6 +200,38 @@ describe("resource creation service", () => {
     });
   });
 
+  describe("publish payload normalization", () => {
+    it("builds one normalized payload and omits local bookkeeping", () => {
+      const draft: ResourceDraft = {
+        ...createEmptyDraft(),
+        amount: "",
+        assetCode: "",
+        assetIssuer: "",
+        description: "  Weather data  ",
+        name: "  Weather API  ",
+        network: "stellar:testnet",
+        payTo: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+        routeTemplate: "/weather/{city}",
+        url: "https://example.test/weather",
+        extensions: { category: "weather" }
+      };
+
+      const payload = buildResourcePublishPayload(draft, "seller_1");
+
+      expect(payload.name).toBe("Weather API");
+      expect(payload.description).toBe("Weather data");
+      expect(payload.amount).toBe("0");
+      expect(payload.assetCode).toBe("USDC");
+      for (const omitted of RESOURCE_PUBLISH_OMITTED_FIELDS) {
+        expect(payload).not.toHaveProperty(omitted);
+      }
+    });
+
+    it("rejects an incomplete draft before it can be submitted", () => {
+      expect(() => buildResourcePublishPayload(createEmptyDraft(), "seller_1")).toThrow();
+    });
+  });
+
   describe("localStorage persistence", () => {
     let mockStorage: Record<string, string> = {};
 
@@ -232,6 +269,36 @@ describe("resource creation service", () => {
       expect(loaded).not.toBeNull();
       expect(loaded?.name).toBe("Test API");
       expect(loaded?.description).toBe("Test Description");
+    });
+
+    it("stores the schema version and save age for recovery", () => {
+      const draft = { ...createEmptyDraft(), name: "Recoverable API" } as ResourceDraft & {
+        privateKey?: string;
+      };
+      draft.privateKey = "S...";
+
+      saveDraftToStorage(draft, new Date("2026-11-19T10:00:00.000Z"));
+
+      const recovery = loadDraftRecoveryFromStorage();
+      expect(recovery).not.toBeNull();
+      expect(recovery?.schemaVersion).toBe(RESOURCE_DRAFT_STORAGE_VERSION);
+      expect(recovery?.savedAt).toBe("2026-11-19T10:00:00.000Z");
+      expect(recovery?.draft.name).toBe("Recoverable API");
+      expect(recovery?.draft).not.toHaveProperty("privateKey");
+      expect(formatDraftAge("2026-11-19T10:00:00.000Z", new Date("2026-11-19T10:05:00.000Z"))).toBe(
+        "5 minutes"
+      );
+    });
+
+    it("discards records with an unknown storage schema version", () => {
+      mockStorage["lumenbazaar_resource_draft"] = JSON.stringify({
+        draft: createEmptyDraft(),
+        savedAt: new Date().toISOString(),
+        schemaVersion: 99
+      });
+
+      expect(loadDraftRecoveryFromStorage()).toBeNull();
+      expect(mockStorage["lumenbazaar_resource_draft"]).toBeUndefined();
     });
 
     it("clears draft from storage", () => {

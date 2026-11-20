@@ -4,13 +4,26 @@ import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { DataFreshnessBadge } from "@/components/ui/data-freshness-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
-import { ResourceCard } from "@/components/resources/resource-card";
+import { ColumnChooser } from "@/components/ui/column-chooser";
+import {
+  ResourceCard,
+  discoveryResultFieldIds,
+  discoveryResultFields,
+  type DiscoveryResultField
+} from "@/components/resources/resource-card";
+import { ResourceCardSkeletonList } from "@/components/resources/resource-card-skeleton";
+import { getVisibleColumns, resetColumnPreference } from "@/services/column-preferences";
+import {
+  loadDiscoveryDensity,
+  saveDiscoveryDensity,
+  type DiscoveryDensity
+} from "@/services/settings";
 import { EmptyState, ErrorState } from "@/components/ui/surfaces";
 import {
   discoveryDefaults,
@@ -23,7 +36,7 @@ import {
 import { maxComparisonResources } from "@/services/resource-comparison";
 import { queryKeys } from "@/services/api/query";
 import { searchCatalog, type ResourceSort } from "@/services/catalog";
-import { runtimeConfig } from "@/config/runtime";
+import { loadRuntimeConfig } from "@/config/runtime";
 import { normalizeUiError } from "@/services/ui-state";
 
 type ExploreSearchProps = {
@@ -37,18 +50,37 @@ const sortOptions: Array<{ label: string; value: ResourceSort }> = [
   { label: "Recently updated", value: "recent" }
 ];
 
-const networkOptions = [
-  { label: "All networks", value: "" },
-  { label: "stellar:testnet", value: "stellar:testnet" },
-  ...(runtimeConfig.enableMainnet ? [{ label: "stellar:pubnet", value: "stellar:pubnet" }] : [])
-];
+const discoveryResultsTableId = "discovery-results";
+const requiredResultFields = discoveryResultFields
+  .filter((field) => field.required)
+  .map((field) => field.id);
+const resultFieldOptions = discoveryResultFields.map((field) => ({
+  id: field.id,
+  label: field.label,
+  required: field.required ?? false
+}));
+
+function networkOptions() {
+  return [
+    { label: "All networks", value: "" },
+    { label: "stellar:testnet", value: "stellar:testnet" },
+    ...(loadRuntimeConfig().features.enableMainnet
+      ? [{ label: "stellar:pubnet", value: "stellar:pubnet" }]
+      : [])
+  ];
+}
 
 export function ExploreSearch({ initialState }: ExploreSearchProps) {
   const router = useRouter();
+  const networkChoices = networkOptions();
   const [state, setState] = useState<DiscoveryState>(initialState);
   const [queryDraft, setQueryDraft] = useState(initialState.q);
   const [priceDrafts, setPriceDrafts] = useState<DiscoveryState>(initialState);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [density, setDensity] = useState<DiscoveryDensity>("comfortable");
+  const [visibleFields, setVisibleFields] = useState<DiscoveryResultField[]>([
+    ...discoveryResultFieldIds
+  ]);
   const request = toExploreSearchInput(state);
   const { data, error, isFetching, refetch } = useQuery({
     queryFn: () => searchCatalog(request),
@@ -58,6 +90,33 @@ export function ExploreSearch({ initialState }: ExploreSearchProps) {
   // results must not survive an outage. Both cases use the explicit unavailable
   // state below, while a successful empty response keeps the empty state.
   const unavailable = error !== null;
+
+  // Read persisted view preferences after mount so server and client render the
+  // same defaults first; density never changes which results are returned.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDensity(loadDiscoveryDensity());
+    setVisibleFields(
+      getVisibleColumns(discoveryResultsTableId, [
+        ...discoveryResultFieldIds
+      ]) as DiscoveryResultField[]
+    );
+  }, []);
+
+  function changeDensity(next: DiscoveryDensity) {
+    setDensity(next);
+    saveDiscoveryDensity(next);
+  }
+
+  function resetView() {
+    changeDensity("comfortable");
+    const preference = resetColumnPreference(
+      discoveryResultsTableId,
+      [...discoveryResultFieldIds],
+      requiredResultFields
+    );
+    setVisibleFields(preference.visibleColumns as DiscoveryResultField[]);
+  }
 
   function goTo(next: DiscoveryState) {
     setState(next);
@@ -143,7 +202,7 @@ export function ExploreSearch({ initialState }: ExploreSearchProps) {
                 }
                 value={filters.network ?? ""}
               >
-                {networkOptions.map((option) => (
+                {networkChoices.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -263,15 +322,39 @@ export function ExploreSearch({ initialState }: ExploreSearchProps) {
           ) : null}
           {state.cursor ? <Badge tone="info">Cursor page</Badge> : null}
         </div>
-        <p className="text-sm text-slate-600">
-          {unavailable
-            ? "Results unavailable"
-            : isFetching
-              ? "Refreshing"
-              : data === undefined
-                ? "Loading resources"
-                : `${data.resources.length} resources`}
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <span>Density</span>
+            <select
+              aria-label="Result density"
+              className="min-h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
+              onChange={(event) => changeDensity(event.target.value as DiscoveryDensity)}
+              value={density}
+            >
+              <option value="comfortable">Comfortable</option>
+              <option value="compact">Compact</option>
+            </select>
+          </label>
+          <ColumnChooser
+            buttonLabel="Fields"
+            columns={resultFieldOptions}
+            onColumnsChange={(fields) => setVisibleFields(fields as DiscoveryResultField[])}
+            requiredColumnIds={requiredResultFields}
+            tableId={discoveryResultsTableId}
+          />
+          <Button onClick={resetView} type="button" variant="secondary">
+            Reset view
+          </Button>
+          <p className="text-sm text-slate-600">
+            {unavailable
+              ? "Results unavailable"
+              : isFetching
+                ? "Refreshing"
+                : data === undefined
+                  ? "Loading resources"
+                  : `${data.resources.length} resources`}
+          </p>
+        </div>
       </div>
 
       <Card>
@@ -339,21 +422,27 @@ export function ExploreSearch({ initialState }: ExploreSearchProps) {
         />
       ) : null}
 
-      <div className="grid gap-3" aria-live="polite">
-        {!unavailable &&
-          data?.resources.map((resource) => (
-            <ResourceCard
-              compare={{
-                disabled: selectedIds.length >= maxComparisonResources,
-                onToggle: () => toggleComparison(resource.id),
-                selected: selectedIds.includes(resource.id)
-              }}
-              key={resource.id}
-              partialResults={data.partialResults}
-              resource={resource}
-            />
-          ))}
-      </div>
+      {!unavailable && data === undefined ? (
+        <ResourceCardSkeletonList density={density} />
+      ) : (
+        <div aria-live="polite" className="grid gap-3">
+          {!unavailable &&
+            data?.resources.map((resource) => (
+              <ResourceCard
+                compare={{
+                  disabled: selectedIds.length >= maxComparisonResources,
+                  onToggle: () => toggleComparison(resource.id),
+                  selected: selectedIds.includes(resource.id)
+                }}
+                density={density}
+                key={resource.id}
+                partialResults={data.partialResults}
+                resource={resource}
+                visibleFields={visibleFields}
+              />
+            ))}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {!unavailable && data?.nextCursor ? (

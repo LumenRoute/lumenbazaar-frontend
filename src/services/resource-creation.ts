@@ -1,7 +1,12 @@
 import { z } from "zod";
 
 import { networkIdSchema } from "@/config/networks";
-import { jsonObjectSchema, resourceTypeSchema, type ResourceType } from "@/services/api/schemas";
+import {
+  jsonObjectSchema,
+  resourceTypeSchema,
+  type CreateResourceInput,
+  type ResourceType
+} from "@/services/api/schemas";
 
 // Route template validation for both HTTP and MCP
 export function validateRouteTemplate(template: string, type: ResourceType): boolean {
@@ -227,6 +232,59 @@ export const resourceDraftPublishSchema = resourceDraftSchema
     path: ["routeTemplate"]
   });
 
+/**
+ * Single normalized source for both the publish preview and the submitted
+ * request. Parsing with the publish schema guarantees the preview can never
+ * describe fields that would be dropped or defaulted differently at submit
+ * time.
+ *
+ * @throws ZodError when required publish fields are missing or invalid
+ */
+export function buildResourcePublishPayload(
+  draft: ResourceDraft,
+  sellerId: string
+): CreateResourceInput {
+  const validated = resourceDraftPublishSchema.parse(draft);
+
+  return {
+    sellerId,
+    name: validated.name.trim(),
+    description: validated.description.trim(),
+    type: validated.type,
+    url: validated.url.trim(),
+    routeTemplate: validated.routeTemplate.trim(),
+    network: validated.network || "stellar:testnet",
+    assetCode: validated.assetCode || "USDC",
+    assetIssuer: validated.assetIssuer || "",
+    amount: validated.amount || "0",
+    payTo: validated.payTo || "",
+    inputSchema: validated.inputSchema || { type: "object", properties: {} },
+    outputSchema: validated.outputSchema || { type: "object", properties: {} },
+    ...(validated.extensions === undefined ? {} : { extensions: validated.extensions })
+  };
+}
+
+/** Fields included in the submitted payload shown by the publish preview. */
+export const RESOURCE_PUBLISH_PUBLIC_FIELDS = [
+  "sellerId",
+  "name",
+  "description",
+  "type",
+  "url",
+  "routeTemplate",
+  "network",
+  "assetCode",
+  "assetIssuer",
+  "amount",
+  "payTo",
+  "inputSchema",
+  "outputSchema",
+  "extensions"
+] as const satisfies ReadonlyArray<keyof CreateResourceInput>;
+
+/** Draft-only bookkeeping that is never submitted with a publish request. */
+export const RESOURCE_PUBLISH_OMITTED_FIELDS = ["createdAt", "updatedAt", "status"] as const;
+
 export function createEmptyDraft(): ResourceDraft {
   const now = new Date().toISOString();
   return {
@@ -250,29 +308,120 @@ export function updateDraft(draft: ResourceDraft, updates: Partial<ResourceDraft
 }
 
 // localStorage helpers
-const DRAFT_STORAGE_KEY = "lumenbazaar_resource_draft";
+export const RESOURCE_DRAFT_STORAGE_KEY = "lumenbazaar_resource_draft";
+export const RESOURCE_DRAFT_STORAGE_VERSION = 1;
 
-export function saveDraftToStorage(draft: ResourceDraft): void {
-  if (typeof window !== "undefined") {
-    const validated = resourceDraftSchema.parse(draft);
-    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(validated));
+const DRAFT_STORAGE_KEY = RESOURCE_DRAFT_STORAGE_KEY;
+
+export type ResourceDraftRecovery = {
+  draft: ResourceDraft;
+  savedAt: string;
+  schemaVersion: number;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Persists only schema-validated, non-secret draft metadata together with the
+ * timestamp and schema version needed for an explicit recovery prompt.
+ */
+export function saveDraftToStorage(draft: ResourceDraft, timestamp: Date = new Date()): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const validated = resourceDraftSchema.parse(draft);
+  const persisted = Object.fromEntries(
+    EXPORTABLE_DRAFT_FIELDS.map((field) => [field, validated[field]])
+  ) as ResourceDraft;
+
+  localStorage.setItem(
+    DRAFT_STORAGE_KEY,
+    JSON.stringify({
+      draft: persisted,
+      savedAt: timestamp.toISOString(),
+      schemaVersion: RESOURCE_DRAFT_STORAGE_VERSION
+    })
+  );
+}
+
+/**
+ * Loads a recoverable autosave with its age and schema version. Unknown schema
+ * versions and invalid records are discarded rather than trusted.
+ */
+export function loadDraftRecoveryFromStorage(): ResourceDraftRecovery | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const stored = localStorage.getItem(DRAFT_STORAGE_KEY);
+
+  if (stored === null) {
+    return null;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(stored);
+
+    if (!isRecord(parsed)) {
+      throw new Error("Draft record is not an object");
+    }
+
+    // Legacy records stored a bare draft; treat their updatedAt as the save time.
+    if (!("schemaVersion" in parsed)) {
+      const draft = resourceDraftSchema.parse(parsed);
+      return { draft, savedAt: draft.updatedAt, schemaVersion: RESOURCE_DRAFT_STORAGE_VERSION };
+    }
+
+    if (parsed.schemaVersion !== RESOURCE_DRAFT_STORAGE_VERSION) {
+      throw new Error("Unsupported draft schema version");
+    }
+
+    const draft = resourceDraftSchema.parse(parsed.draft);
+    const savedAt =
+      typeof parsed.savedAt === "string" && !Number.isNaN(Date.parse(parsed.savedAt))
+        ? parsed.savedAt
+        : draft.updatedAt;
+
+    return { draft, savedAt, schemaVersion: RESOURCE_DRAFT_STORAGE_VERSION };
+  } catch {
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+    return null;
   }
 }
 
 export function loadDraftFromStorage(): ResourceDraft | null {
-  if (typeof window !== "undefined") {
-    const stored = localStorage.getItem(DRAFT_STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as unknown;
-        return resourceDraftSchema.parse(parsed);
-      } catch {
-        // Invalid stored data, clear it
-        localStorage.removeItem(DRAFT_STORAGE_KEY);
-      }
-    }
+  return loadDraftRecoveryFromStorage()?.draft ?? null;
+}
+
+/** Human-readable age for the recovery prompt (never a precise secret-bearing timestamp). */
+export function formatDraftAge(savedAt: string, now: Date = new Date()): string {
+  const savedTime = Date.parse(savedAt);
+
+  if (Number.isNaN(savedTime)) {
+    return "an unknown time";
   }
-  return null;
+
+  const minutes = Math.floor(Math.max(0, now.getTime() - savedTime) / 60_000);
+
+  if (minutes < 1) {
+    return "less than a minute";
+  }
+
+  if (minutes < 60) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+
+  if (hours < 24) {
+    return `${hours} hour${hours === 1 ? "" : "s"}`;
+  }
+
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"}`;
 }
 
 export function clearDraftFromStorage(): void {
