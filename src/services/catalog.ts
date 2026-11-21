@@ -121,7 +121,9 @@ export function sortResources<TResource extends Resource>(
       return right.updatedAt.localeCompare(left.updatedAt) || left.name.localeCompare(right.name);
     }
 
-    return left.name.localeCompare(right.name);
+    // Relevance is defined by the backend ranking; keep its order rather than
+    // inventing a client-side ranking field the API does not expose.
+    return 0;
   });
 }
 
