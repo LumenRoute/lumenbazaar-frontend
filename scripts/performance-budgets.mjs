@@ -2,72 +2,49 @@
 
 /**
  * Performance Budget Validation Script
- * 
+ *
  * Measures and validates:
  * - Route bundle sizes
  * - Route rendering performance (LCP, FID, CLS)
  * - Against configured budgets in performance-budgets.json
- * 
+ *
  * Usage:
  *   node scripts/performance-budgets.mjs [--update]
- * 
+ *
  * Options:
  *   --update    Update budget baselines (requires explicit intent)
  */
 
-import fs from 'fs';
-import path from 'path';
-import { execSync } from 'child_process';
+import fs from "fs";
+import path from "path";
+import { execSync } from "child_process";
 
-const BUDGETS_FILE = 'performance-budgets.json';
-const BUILD_DIR = '.next';
-const MANIFEST_FILE = path.join(BUILD_DIR, 'static', 'manifest.json');
-
-interface RouteMetrics {
-  route: string;
-  bundleSize: number;
-  compressedSize: number;
-  lcpThreshold: number;
-  fidThreshold: number;
-  clsThreshold: number;
-}
-
-interface BudgetConfig {
-  version: string;
-  lastUpdated: string;
-  explanation: string;
-  routes: Record<string, RouteMetrics>;
-  defaults: {
-    bundleSize: number;
-    compressedSize: number;
-    lcp: number;
-    fid: number;
-    cls: number;
-  };
-}
+const BUDGETS_FILE = "performance-budgets.json";
+const BUILD_DIR = ".next";
+const MANIFEST_FILE = path.join(BUILD_DIR, "static", "manifest.json");
 
 /**
  * Parse Next.js build manifest to extract route sizes
  */
 function extractRouteSizes() {
-  const manifest = JSON.parse(fs.readFileSync(MANIFEST_FILE, 'utf-8'));
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_FILE, "utf-8"));
   const sizes = {};
 
   // Group files by route
   for (const [route, data] of Object.entries(manifest)) {
-    if (typeof data !== 'object' || data === null) continue;
+    if (typeof data !== "object" || data === null) continue;
 
     const files = data.files || [];
     let totalSize = 0;
     let compressedSize = 0;
 
     for (const file of files) {
-      if (typeof file === 'string') {
-        const filePath = path.join(BUILD_DIR, 'static', file);
+      if (typeof file === "string") {
+        const filePath = path.join(BUILD_DIR, "static", file);
         if (fs.existsSync(filePath)) {
           const stat = fs.statSync(filePath);
           totalSize += stat.size;
-          
+
           // Estimate compressed size (rough heuristic)
           compressedSize += Math.ceil(stat.size * 0.3);
         }
@@ -92,7 +69,7 @@ function getBudgetConfig() {
   if (!fs.existsSync(BUDGETS_FILE)) {
     return null;
   }
-  return JSON.parse(fs.readFileSync(BUDGETS_FILE, 'utf-8'));
+  return JSON.parse(fs.readFileSync(BUDGETS_FILE, "utf-8"));
 }
 
 /**
@@ -103,11 +80,11 @@ function calculateDeltas(currentSizes, budgetConfig) {
 
   for (const [route, current] of Object.entries(currentSizes)) {
     const budgeted = budgetConfig.routes[route];
-    
+
     if (!budgeted) {
       deltas.push({
         route,
-        status: 'new',
+        status: "new",
         bundleSize: current.bundleSize,
         bundleDelta: null,
         compressedSize: current.compressedSize,
@@ -123,7 +100,7 @@ function calculateDeltas(currentSizes, budgetConfig) {
 
     deltas.push({
       route,
-      status: bundleExceeded || compressedExceeded ? 'exceeded' : 'ok',
+      status: bundleExceeded || compressedExceeded ? "exceeded" : "ok",
       bundleSize: current.bundleSize,
       bundleDelta,
       bundleExceeded,
@@ -140,31 +117,33 @@ function calculateDeltas(currentSizes, budgetConfig) {
  * Format bytes for display
  */
 function formatBytes(bytes) {
-  if (bytes === 0) return '0 B';
+  if (bytes === 0) return "0 B";
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB'];
+  const sizes = ["B", "KB", "MB"];
   const i = Math.floor(Math.log(Math.abs(bytes)) / Math.log(k));
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
 }
 
 /**
  * Report results in CI-friendly format
  */
 function reportDeltas(deltas) {
-  console.log('\n=== Performance Budget Report ===\n');
+  console.log("\n=== Performance Budget Report ===\n");
 
   let hasExceeded = false;
 
   for (const delta of deltas) {
-    const bundleDeltaStr = delta.bundleDelta !== null 
-      ? ` ${delta.bundleDelta >= 0 ? '+' : ''}${formatBytes(delta.bundleDelta)}`
-      : ' (new)';
+    const bundleDeltaStr =
+      delta.bundleDelta !== null
+        ? ` ${delta.bundleDelta >= 0 ? "+" : ""}${formatBytes(delta.bundleDelta)}`
+        : " (new)";
 
-    const compressedDeltaStr = delta.compressedDelta !== null
-      ? ` ${delta.compressedDelta >= 0 ? '+' : ''}${formatBytes(delta.compressedDelta)}`
-      : ' (new)';
+    const compressedDeltaStr =
+      delta.compressedDelta !== null
+        ? ` ${delta.compressedDelta >= 0 ? "+" : ""}${formatBytes(delta.compressedDelta)}`
+        : " (new)";
 
-    const icon = delta.status === 'exceeded' ? '❌' : delta.status === 'new' ? '📦' : '✅';
+    const icon = delta.status === "exceeded" ? "❌" : delta.status === "new" ? "📦" : "✅";
 
     console.log(`${icon} ${delta.route}`);
     console.log(`   Bundle: ${formatBytes(delta.bundleSize)}${bundleDeltaStr}`);
@@ -181,15 +160,15 @@ function reportDeltas(deltas) {
     }
   }
 
-  console.log('\n');
+  console.log("\n");
 
   if (hasExceeded) {
-    console.log('❌ Performance budgets exceeded. See deltas above.');
-    console.log('\nTo update budgets intentionally:');
-    console.log('  pnpm run performance:update-budgets\n');
+    console.log("❌ Performance budgets exceeded. See deltas above.");
+    console.log("\nTo update budgets intentionally:");
+    console.log("  pnpm run performance:update-budgets\n");
     return false;
   } else {
-    console.log('✅ All routes within performance budgets.\n');
+    console.log("✅ All routes within performance budgets.\n");
     return true;
   }
 }
@@ -199,18 +178,19 @@ function reportDeltas(deltas) {
  */
 function updateBudgets(currentSizes) {
   const existing = getBudgetConfig();
-  
+
   const updated = {
-    version: '1.0.0',
+    version: "1.0.0",
     lastUpdated: new Date().toISOString(),
-    explanation: 'Performance budgets for route bundle sizes. Update only after reviewing and approving intentional size increases.',
+    explanation:
+      "Performance budgets for route bundle sizes. Update only after reviewing and approving intentional size increases.",
     routes: {},
     defaults: existing?.defaults || {
-      bundleSize: 500000,      // 500 KB uncompressed
-      compressedSize: 150000,  // 150 KB gzipped
-      lcp: 2500,               // 2.5s
-      fid: 100,                // 100ms
-      cls: 0.1                 // 0.1 CLS
+      bundleSize: 500000, // 500 KB uncompressed
+      compressedSize: 150000, // 150 KB gzipped
+      lcp: 2500, // 2.5s
+      fid: 100, // 100ms
+      cls: 0.1 // 0.1 CLS
     }
   };
 
@@ -225,7 +205,7 @@ function updateBudgets(currentSizes) {
     };
   }
 
-  fs.writeFileSync(BUDGETS_FILE, JSON.stringify(updated, null, 2) + '\n');
+  fs.writeFileSync(BUDGETS_FILE, JSON.stringify(updated, null, 2) + "\n");
   console.log(`✅ Updated performance budgets in ${BUDGETS_FILE}`);
 }
 
@@ -246,7 +226,7 @@ async function main() {
     }
 
     const currentSizes = extractRouteSizes();
-    const shouldUpdate = process.argv.includes('--update');
+    const shouldUpdate = process.argv.includes("--update");
 
     if (shouldUpdate) {
       updateBudgets(currentSizes);
@@ -268,7 +248,7 @@ async function main() {
       process.exit(1);
     }
   } catch (error) {
-    console.error('❌ Error validating performance budgets:', error.message);
+    console.error("❌ Error validating performance budgets:", error.message);
     process.exit(1);
   }
 }

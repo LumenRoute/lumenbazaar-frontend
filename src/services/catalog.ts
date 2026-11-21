@@ -108,6 +108,12 @@ export function sortResources<TResource extends Resource>(
   resources: TResource[],
   sort: ResourceSort
 ) {
+  // Relevance is defined by the backend ranking. Keep that order instead of
+  // inventing a client-side ranking field that the API does not expose.
+  if (sort === "relevance") {
+    return [...resources];
+  }
+
   return [...resources].sort((left, right) => {
     if (sort === "price-asc") {
       return Number(left.amount) - Number(right.amount) || left.name.localeCompare(right.name);
@@ -117,13 +123,7 @@ export function sortResources<TResource extends Resource>(
       return Number(right.amount) - Number(left.amount) || left.name.localeCompare(right.name);
     }
 
-    if (sort === "recent") {
-      return right.updatedAt.localeCompare(left.updatedAt) || left.name.localeCompare(right.name);
-    }
-
-    // Relevance is defined by the backend ranking; keep its order rather than
-    // inventing a client-side ranking field the API does not expose.
-    return 0;
+    return right.updatedAt.localeCompare(left.updatedAt) || left.name.localeCompare(right.name);
   });
 }
 

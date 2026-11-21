@@ -142,6 +142,14 @@ describe("catalog search", () => {
     expect(sorted[0]?.amount).toBe("0.1200000");
   });
 
+  it("preserves backend order for relevance", () => {
+    const reversed = [...demoResources].reverse();
+
+    expect(sortResources(reversed, "relevance").map((resource) => resource.id)).toEqual(
+      reversed.map((resource) => resource.id)
+    );
+  });
+
   it("applies local filter state in demo mode", async () => {
     const result = await searchCatalog(
       {
