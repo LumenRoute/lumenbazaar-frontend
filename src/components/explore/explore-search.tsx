@@ -81,6 +81,7 @@ export function ExploreSearch({ initialState }: ExploreSearchProps) {
   const [visibleFields, setVisibleFields] = useState<DiscoveryResultField[]>([
     ...discoveryResultFieldIds
   ]);
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const request = toExploreSearchInput(state);
   const { data, error, isFetching, refetch } = useQuery({
     queryFn: () => searchCatalog(request),
@@ -106,6 +107,12 @@ export function ExploreSearch({ initialState }: ExploreSearchProps) {
   function changeDensity(next: DiscoveryDensity) {
     setDensity(next);
     saveDiscoveryDensity(next);
+  }
+
+  function handleRefresh() {
+    if (isManualRefreshing || isFetching) return;
+    setIsManualRefreshing(true);
+    void refetch().finally(() => setIsManualRefreshing(false));
   }
 
   function resetView() {
@@ -318,7 +325,12 @@ export function ExploreSearch({ initialState }: ExploreSearchProps) {
             <Badge tone="warning">Partial results</Badge>
           ) : null}
           {!unavailable && data ? (
-            <DataFreshnessBadge observedAt={data.fetchedAt} source={data.source} />
+            <DataFreshnessBadge
+              observedAt={data.fetchedAt}
+              source={data.source}
+              onRefresh={handleRefresh}
+              isRefreshing={isManualRefreshing}
+            />
           ) : null}
           {state.cursor ? <Badge tone="info">Cursor page</Badge> : null}
         </div>
