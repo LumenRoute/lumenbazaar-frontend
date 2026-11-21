@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import { networkIdSchema, type NetworkId } from "@/config/networks";
 import type { ResourceSort, ExploreSearchInput } from "@/services/catalog";
 import type { ResourceType } from "@/services/api/schemas";
@@ -36,6 +38,7 @@ const maxQueryLength = 200;
 const maxAssetLength = 128;
 const maxCursorLength = 1024;
 const atomicPricePattern = /^\d+(?:\.\d{1,7})?$/;
+const assetPattern = /^[A-Za-z0-9:_.-]+$/;
 
 export function emptyDiscoveryState(): DiscoveryState {
   return {
@@ -81,14 +84,11 @@ export function parseDiscoveryState(
 }
 
 /**
- * Serializes discovery state to canonical query parameters.
- *
- * Defaults are omitted so equivalent states share one URL. Unknown values are
- * rejected up front, which keeps generated links deep-linkable.
+ * Normalizes an in-memory discovery state with the same rules as the URL
+ * parser, so drafts, saved searches, and copied links resolve identically.
  */
-export function serializeDiscoveryState(state: DiscoveryState): string {
-  const params = new URLSearchParams();
-  const sanitized = parseDiscoveryState({
+export function canonicalDiscoveryState(state: DiscoveryState): DiscoveryState {
+  return parseDiscoveryState({
     asset: state.asset,
     cursor: state.cursor,
     extension: state.extension,
@@ -100,6 +100,60 @@ export function serializeDiscoveryState(state: DiscoveryState): string {
     sort: state.sort,
     type: state.type
   });
+}
+
+const comparableDiscoveryKeys = [
+  "asset",
+  "cursor",
+  "extension",
+  "maxPrice",
+  "minPrice",
+  "network",
+  "q",
+  "sellerVerification",
+  "sort",
+  "type"
+] as const satisfies ReadonlyArray<keyof DiscoveryState>;
+
+function isCanonicalDiscoveryState(state: DiscoveryState): boolean {
+  const canonical = canonicalDiscoveryState(state);
+
+  return comparableDiscoveryKeys.every((key) => state[key] === canonical[key]);
+}
+
+/**
+ * Strict runtime schema for a discovery state without pagination, used for
+ * anything persisted outside the URL. Fields share the parser's bounds, unknown
+ * keys (including `cursor`) are rejected, and the value must already be in
+ * canonical form, so stored state can never be read differently from a link.
+ */
+export const pagelessDiscoveryStateSchema = z
+  .strictObject({
+    asset: z.string().min(1).max(maxAssetLength).regex(assetPattern).optional(),
+    extension: z.enum(extensionOptions).optional(),
+    maxPrice: z.string().regex(atomicPricePattern).optional(),
+    minPrice: z.string().regex(atomicPricePattern).optional(),
+    network: networkIdSchema.optional(),
+    q: z.string().max(maxQueryLength),
+    sellerVerification: z.enum(sellerVerificationOptions),
+    sort: z.enum(resourceSorts),
+    type: z.enum(resourceTypeOptions).optional()
+  })
+  .refine((state) => isCanonicalDiscoveryState(state), {
+    message: "Discovery state must already be normalized."
+  });
+
+export type PagelessDiscoveryState = z.infer<typeof pagelessDiscoveryStateSchema>;
+
+/**
+ * Serializes discovery state to canonical query parameters.
+ *
+ * Defaults are omitted so equivalent states share one URL. Unknown values are
+ * rejected up front, which keeps generated links deep-linkable.
+ */
+export function serializeDiscoveryState(state: DiscoveryState): string {
+  const params = new URLSearchParams();
+  const sanitized = canonicalDiscoveryState(state);
 
   if (sanitized.q.length > 0) params.set("q", sanitized.q);
   if (sanitized.sort !== discoveryDefaults.sort) params.set("sort", sanitized.sort);
@@ -176,7 +230,7 @@ function normalizeAsset(value: string | undefined) {
 
   const trimmed = value.trim();
   if (trimmed.length === 0 || trimmed.length > maxAssetLength) return undefined;
-  if (!/^[A-Za-z0-9:_.-]+$/.test(trimmed)) return undefined;
+  if (!assetPattern.test(trimmed)) return undefined;
 
   return trimmed;
 }

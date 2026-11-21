@@ -18,6 +18,7 @@ import {
   type DiscoveryResultField
 } from "@/components/resources/resource-card";
 import { ResourceCardSkeletonList } from "@/components/resources/resource-card-skeleton";
+import { SavedDiscoverySearches } from "@/components/explore/saved-discovery-searches";
 import { getVisibleColumns, resetColumnPreference } from "@/services/column-preferences";
 import {
   loadDiscoveryDensity,
@@ -136,6 +137,20 @@ export function ExploreSearch({ initialState }: ExploreSearchProps) {
   function submitSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     goTo({ ...withDrafts(state), cursor: undefined, q: queryDraft.trim() });
+  }
+
+  // What Search would run right now, so saving never drops a typed query or a
+  // price/asset draft. Saved searches never keep the pagination cursor.
+  const effectiveState: DiscoveryState = {
+    ...withDrafts(state),
+    cursor: undefined,
+    q: queryDraft.trim()
+  };
+
+  function applySavedSearch(saved: DiscoveryState) {
+    // goTo() does not touch the query input, so sync it explicitly.
+    setQueryDraft(saved.q);
+    goTo({ ...saved, cursor: undefined });
   }
 
   function toggleComparison(id: string) {
@@ -305,6 +320,8 @@ export function ExploreSearch({ initialState }: ExploreSearchProps) {
           </form>
         </CardBody>
       </Card>
+
+      <SavedDiscoverySearches currentState={effectiveState} onApply={applySavedSearch} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">

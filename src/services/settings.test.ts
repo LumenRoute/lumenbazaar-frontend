@@ -1,7 +1,15 @@
 import { describe, it, expect, beforeEach } from "vitest";
 
+import { parseDiscoveryState } from "./discovery-params";
 import {
+  SAVED_DISCOVERY_SEARCHES_STORAGE_KEY,
+  loadSavedDiscoverySearches,
+  saveDiscoverySearch
+} from "./discovery-saved-searches";
+import {
+  clearFrontendLocalData,
   defaultFrontendSettings,
+  frontendLocalDataStorageKeys,
   frontendSettingsSchema,
   loadDiscoveryDensity,
   loadFrontendSettings,
@@ -477,6 +485,61 @@ describe("Frontend Settings", () => {
 
       expect(resetDiscoveryDensity(mockStorage)).toBe("comfortable");
       expect(loadDiscoveryDensity(mockStorage)).toBe("comfortable");
+    });
+  });
+
+  describe("Clear local data", () => {
+    it("removes every saved discovery search", () => {
+      saveDiscoverySearch("Weather", parseDiscoveryState({ q: "weather" }), mockStorage);
+      saveDiscoverySearch("Maps", parseDiscoveryState({ q: "maps" }), mockStorage);
+
+      clearFrontendLocalData(mockStorage);
+
+      expect(mockStorage.getItem(SAVED_DISCOVERY_SEARCHES_STORAGE_KEY)).toBeNull();
+      expect(loadSavedDiscoverySearches(mockStorage)).toEqual([]);
+    });
+
+    it("resets frontend preferences and the discovery density", () => {
+      saveFrontendSettings(
+        { ...defaultFrontendSettings(), walletPreference: "manual" },
+        mockStorage
+      );
+      saveDiscoveryDensity("compact", mockStorage);
+
+      expect(clearFrontendLocalData(mockStorage)).toEqual(defaultFrontendSettings());
+      expect(loadFrontendSettings(mockStorage)).toEqual(defaultFrontendSettings());
+      expect(loadDiscoveryDensity(mockStorage)).toBe("comfortable");
+    });
+
+    it("leaves unrelated local data untouched", () => {
+      const unrelated = {
+        "lumenbazaar.accessibility.theme.v1": "high-contrast",
+        "lumenbazaar.frontend.bookmarks.v1": "[]",
+        "lumenbazaar.frontend.column-preferences.v1": "{}",
+        "lumenbazaar.frontend.recently-viewed.v1": "[]",
+        "lumenbazaar.frontend.transaction-views.v1": "[]",
+        "lumenbazaar.wallet.provider.v1": "freighter",
+        lumenbazaar_resource_draft: "{}"
+      };
+      for (const [key, value] of Object.entries(unrelated)) {
+        mockStorage.setItem(key, value);
+      }
+      saveDiscoverySearch("Weather", parseDiscoveryState({ q: "weather" }), mockStorage);
+
+      clearFrontendLocalData(mockStorage);
+
+      for (const [key, value] of Object.entries(unrelated)) {
+        expect(mockStorage.getItem(key)).toBe(value);
+      }
+      expect(mockStorage.length).toBe(Object.keys(unrelated).length);
+    });
+
+    it("documents exactly which keys it clears", () => {
+      expect(frontendLocalDataStorageKeys).toEqual([
+        "lumenbazaar.frontend.settings.v1",
+        "lumenbazaar.frontend.discovery-density.v1",
+        "lumenbazaar.frontend.discovery-searches.v1"
+      ]);
     });
   });
 });

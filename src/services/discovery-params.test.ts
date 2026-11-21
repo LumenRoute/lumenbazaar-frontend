@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canonicalDiscoveryState,
   discoveryHref,
+  pagelessDiscoveryStateSchema,
   parseDiscoveryState,
   serializeDiscoveryState,
   toExploreSearchInput,
@@ -89,5 +91,61 @@ describe("discovery URL state", () => {
     expect(serializeDiscoveryState(state)).toBe("q=weather");
     expect(toExploreSearchInput(state)).not.toHaveProperty("wallet");
     expect(toExploreSearchInput(state)).not.toHaveProperty("paymentPayload");
+  });
+
+  it("canonicalizes in-memory drafts with the same rules as the URL parser", () => {
+    const draft: DiscoveryState = {
+      asset: "  USDC ",
+      maxPrice: "0.01",
+      minPrice: "0.5",
+      q: "  weather ",
+      sellerVerification: "any",
+      sort: "bogus" as never
+    };
+
+    expect(canonicalDiscoveryState(draft)).toEqual(
+      parseDiscoveryState(new URLSearchParams(serializeDiscoveryState(draft)))
+    );
+    expect(canonicalDiscoveryState(draft)).toMatchObject({
+      asset: "USDC",
+      minPrice: "0.5",
+      q: "weather",
+      sort: "relevance"
+    });
+    expect(canonicalDiscoveryState(draft).maxPrice).toBeUndefined();
+  });
+
+  it("accepts canonical pageless state and rejects anything a URL would read differently", () => {
+    const pageless: Omit<DiscoveryState, "cursor"> = {
+      asset: completeState.asset,
+      extension: completeState.extension,
+      maxPrice: completeState.maxPrice,
+      minPrice: completeState.minPrice,
+      network: completeState.network,
+      q: completeState.q,
+      sellerVerification: completeState.sellerVerification,
+      sort: completeState.sort,
+      type: completeState.type
+    };
+
+    expect(pagelessDiscoveryStateSchema.safeParse(pageless).success).toBe(true);
+    expect(
+      pagelessDiscoveryStateSchema.safeParse({ q: "", sellerVerification: "any", sort: "recent" })
+        .success
+    ).toBe(true);
+
+    for (const invalid of [
+      { ...pageless, cursor: "page_2" },
+      { ...pageless, unknown: true },
+      { ...pageless, q: " weather" },
+      { ...pageless, sort: "cheapest" },
+      { ...pageless, network: "stellar:futurenet" },
+      { ...pageless, asset: "bad asset" },
+      { ...pageless, minPrice: "1", maxPrice: "0.5" },
+      { ...pageless, q: "q".repeat(201) },
+      { q: "weather" }
+    ]) {
+      expect(pagelessDiscoveryStateSchema.safeParse(invalid).success).toBe(false);
+    }
   });
 });

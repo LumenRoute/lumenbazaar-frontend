@@ -3,6 +3,10 @@ import { z } from "zod";
 import { loadRuntimeConfig, stripTrailingSlash } from "@/config/runtime";
 import { networkIdSchema } from "@/config/networks";
 import { isValidLocale, isValidTimezone } from "@/lib/datetime-formatter";
+import {
+  SAVED_DISCOVERY_SEARCHES_STORAGE_KEY,
+  clearSavedDiscoverySearches
+} from "@/services/discovery-saved-searches";
 
 export const frontendSettingsStorageKey = "lumenbazaar.frontend.settings.v1";
 
@@ -121,6 +125,35 @@ export function resetDiscoveryDensity(
 ): DiscoveryDensity {
   storage?.removeItem(discoveryDensityStorageKey);
   return "comfortable";
+}
+
+/**
+ * Browser-local keys removed by Settings > "Clear local data": frontend
+ * preferences, the discovery density preference, and saved discovery searches.
+ *
+ * The list is explicit on purpose. Wallet preferences, payment and receipt
+ * state, seller drafts, bookmarks, saved transaction views, shared table column
+ * preferences, and accessibility settings are never removed by this action.
+ */
+export const frontendLocalDataStorageKeys = [
+  frontendSettingsStorageKey,
+  discoveryDensityStorageKey,
+  SAVED_DISCOVERY_SEARCHES_STORAGE_KEY
+] as const;
+
+/**
+ * Clears the frontend's local preference data (see
+ * `frontendLocalDataStorageKeys`) and returns the default settings. Nothing is
+ * deleted on a server.
+ */
+export function clearFrontendLocalData(
+  storage: StorageLike | undefined = browserStorage()
+): FrontendSettings {
+  resetFrontendSettings(storage);
+  resetDiscoveryDensity(storage);
+  clearSavedDiscoverySearches(storage);
+
+  return defaultFrontendSettings();
 }
 
 function browserStorage(): StorageLike | undefined {
